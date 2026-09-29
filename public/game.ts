@@ -6,6 +6,12 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { HorizontalTiltShiftShader } from "three/examples/jsm/shaders/HorizontalTiltShiftShader.js";
+import { VerticalTiltShiftShader } from "three/examples/jsm/shaders/VerticalTiltShiftShader.js";
+import { HueSaturationShader } from "three/examples/jsm/shaders/HueSaturationShader.js";
+import { LANDMARK_MODELS, neueResidenz, toyHouse } from "./landmarks";
+import { bake, nightGlowMaterials, C as TOY } from "./toykit";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import bambergData from "./bamberg-map-data.json";
 import muenchenData from "./maps/muenchen.json";
@@ -62,8 +68,8 @@ const characterGltfPromises = CHARACTER_VARIANTS.map((v) => gltfLoader.loadAsync
 // The 3D town keeps ONE palette whatever the page theme is (dark mode used to swap in muddy
 // grass, a dark river and cream "timber"); day vs night is the lighting's job, not the colours'.
 const WORLD_PALETTE: Record<string, string> = {
-  "--sandstone": "#e6cda6", "--sandstone-deep": "#cfae7e", "--regnitz": "#3a7fa6", "--regnitz-deep": "#23587a",
-  "--roof": "#b8573f", "--timber": "#4a3526", "--grass": "#4f9a73", "--grass-deep": "#447f62",
+  "--sandstone": "#e6cda6", "--sandstone-deep": "#cfae7e", "--regnitz": "#5cb6e0", "--regnitz-deep": "#3b93c2",
+  "--roof": "#d9573f", "--timber": "#4a3526", "--grass": "#93c97a", "--grass-deep": "#7fb766",
   "--facade-yellow": "#ecc973", "--facade-pink": "#e3a3a9", "--facade-blue": "#a6c2d2", "--facade-cream": "#f4e9cf",
   "--facade-teal": "#8cb3a0", "--gold": "#c9922f", "--gold-bright": "#e2ae45", "--fog": "#d8cdb4",
 };
@@ -364,6 +370,7 @@ function addDoor(g: THREE.Group, footprint: Footprint, height: number) {
 const buildingWallMaterials: { mat: THREE.MeshStandardMaterial; lit: boolean }[] = [];
 function updateBuildingNightLights() {
   for (const { mat, lit } of buildingWallMaterials) mat.emissiveIntensity = lit ? nightFactor * 1.9 : 0;
+  for (const m of nightGlowMaterials()) m.emissiveIntensity = nightFactor * 1.4;
   if (scene.fog) (scene.fog as THREE.Fog).color.copy(FOG_DAY).lerp(FOG_NIGHT, nightFactor);
 }
 
@@ -566,7 +573,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerP
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = THREE.NeutralToneMapping; // keeps the toy colours bright (ACES washed them out)
 renderer.toneMappingExposure = 1.0; // was 0.5 -- that was a global brightness cut meant to fix an overexposed sky, but it dimmed every material in the scene (buildings, characters, kart) along with it. The sky's own brightness is tuned independently below instead.
 container.innerHTML = ""; // defensive: never end up with two canvases stacked
 container.appendChild(renderer.domElement);
@@ -583,6 +590,15 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(container.clientWidth || 1, container.clientHeight || 1), 0.55, 0.55, 0.82);
 composer.addPass(bloomPass);
+const satPass = new ShaderPass(HueSaturationShader);
+satPass.uniforms.saturation.value = 0.04;
+composer.addPass(satPass);
+// tilt-shift: sharp band across the middle, soft top and bottom -- makes the town read as a miniature
+const tiltH = new ShaderPass(HorizontalTiltShiftShader), tiltV = new ShaderPass(VerticalTiltShiftShader);
+tiltH.uniforms.r.value = tiltV.uniforms.r.value = 0.55;
+composer.addPass(tiltH); composer.addPass(tiltV);
+function sizeTiltShift(w: number, h: number) { tiltH.uniforms.h.value = 1.6 / w; tiltV.uniforms.v.value = 1.6 / h; }
+sizeTiltShift(container.clientWidth || 1280, container.clientHeight || 800);
 composer.addPass(new OutputPass());
 
 let hemi: THREE.HemisphereLight;
@@ -592,7 +608,7 @@ let riverMesh: THREE.Mesh | undefined;
 const FOG_DAY = new THREE.Color("#c3cbd2"), FOG_NIGHT = new THREE.Color("#1c2233");
 function applyThemeColors() {
   scene.fog = new THREE.Fog(FOG_DAY.clone().lerp(FOG_NIGHT, nightFactor).getHex(), 160, 650);
-  if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(IS_BAMBERG ? cssVar("--grass") : IS_OVERVIEW ? "#9ea58f" : "#cfc4ac");
+  if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(IS_OVERVIEW ? "#b9c8a0" : cssVar("--grass"));
   if (riverMesh) (riverMesh.material as THREE.MeshStandardMaterial).color.set(cssVar("--regnitz"));
 }
 
@@ -790,7 +806,7 @@ updateSunFromRealTime();
 // ================= Ground, river, hills =================
 ground = new THREE.Mesh(
   new THREE.PlaneGeometry(HALF * 2.3, HALF * 2.3, 1, 1),
-  new THREE.MeshStandardMaterial({ color: IS_BAMBERG ? cssVar("--grass") : IS_OVERVIEW ? "#9ea58f" : "#cfc4ac", map: createGrassTexture(), roughness: 1, metalness: 0 })
+  new THREE.MeshStandardMaterial({ color: IS_OVERVIEW ? "#b9c8a0" : cssVar("--grass"), map: createGrassTexture(), roughness: 1, metalness: 0 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
@@ -890,8 +906,8 @@ const roadTexture = createRoadTexture();
 const ROAD_TILE_SIZE = 1.6;
 roadTexture.repeat.set(1 / ROAD_TILE_SIZE, 1 / ROAD_TILE_SIZE);
 
-const roadColor = "#55565f"; // dark asphalt on a light kerb (the Starter Kit Racing look)
-const kerbMat = new THREE.MeshStandardMaterial({ color: "#e3e4ee", roughness: 0.8, metalness: 0 });
+const roadColor = IS_OVERVIEW ? "#6b6f7a" : "#f4e6c6"; // toy town: cream paths (motorways stay grey on the map)
+const kerbMat = new THREE.MeshStandardMaterial({ color: IS_OVERVIEW ? "#e3e4ee" : "#dcc494", roughness: 0.8, metalness: 0 });
 // Tracked so applyWeather() can shift every road toward a wet sheen (lower
 // roughness, a little metalness) during rain and back for clear/other
 // weather -- one array write covers every road regardless of count.
@@ -971,148 +987,62 @@ function house(x: number, z: number, w: number, h: number, d: number, wallColor:
   return g;
 }
 
-if (IS_BAMBERG) {
-(function buildRathaus() {
-  const l = LANDMARKS[0]!;
-  const footprint = MAP.landmarks.rathaus!.footprint!;
-  const g = buildingFromFootprint(footprint, 9, cssVar("--sandstone"), cssVar("--roof"));
-  // the real footprint already captures the building spanning the river on
-  // its pier -- just add the recognizable turret on top, offset toward one
-  // end the way the real clock tower sits off-center.
-  const turret = box(2.4, 4, 2.4, cssVar("--timber")); turret.position.set(2, 9 + 2, 3); g.add(turret);
-  const turretRoof = pyramidRoof(2.4, 2.4, 2.6, cssVar("--gold")); turretRoof.position.set(2, 9 + 4 + 1.2, 3); g.add(turretRoof);
-  g.position.set(l.x, l.y!, l.z);
-  scene.add(g);
-  l.mesh = g;
-})();
-
-(function buildDom() {
-  const l = LANDMARKS[1]!;
-  const footprint = MAP.landmarks.dom!.footprint!;
-  // buildingFromFootprint recenters on the footprint's own centroid before
-  // building geometry -- recenter the same way here so the spire offsets
-  // below line up with where the body mesh actually ends up, locally.
-  const ccx = footprint.reduce((s, p) => s + p[0], 0) / footprint.length;
-  const ccz = footprint.reduce((s, p) => s + p[1], 0) / footprint.length;
-  const local = footprint.map(([x, z]) => [x - ccx, z - ccz] as [number, number]);
-  const xs = local.map((p) => p[0]), zs = local.map((p) => p[1]);
-  const hx = (Math.max(...xs) - Math.min(...xs)) / 2 - 5;
-  const hz = (Math.max(...zs) - Math.min(...zs)) / 2 - 5;
-
-  const g = buildingFromFootprint(footprint, 12, cssVar("--sandstone-deep"), cssVar("--roof"));
-  // four corner spires -- the Dom's most recognizable feature -- inset from
-  // the real footprint's own bounding box instead of fixed offsets.
-  ([[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]] as const).forEach(([ox, oz]) => {
-    const spH = 20;
-    const tower = box(3.4, spH, 3.4, cssVar("--timber"));
-    tower.position.set(ox, spH / 2, oz);
-    g.add(tower);
-    const cap = pyramidRoof(3.4, 3.4, 7, cssVar("--gold"));
-    cap.position.set(ox, spH + 3.5, oz);
-    g.add(cap);
-  });
-  g.position.set(l.x, l.y!, l.z);
-  scene.add(g);
-  l.mesh = g;
-})();
-
-(function buildVenedig() {
-  const l = LANDMARKS[2]!;
-  const g = new THREE.Group();
-  // Klein Venedig is famous for exactly this -- a row of small, brightly
-  // painted fishermen's houses right on the riverbank.
-  const colors = [cssVar("--facade-pink"), cssVar("--facade-yellow"), cssVar("--facade-blue"), cssVar("--facade-cream"), cssVar("--facade-teal")];
-  for (let i = 0; i < 5; i++) {
-    const h = house(i * 8 - 16, 0, 6, 5 + (i % 2), 6, colors[i % colors.length]!, cssVar("--roof"), 0);
-    g.add(h);
-  }
-  g.position.set(l.x, 0, l.z);
-  scene.add(g);
-  l.mesh = g;
-})();
-
-(function buildSchlenkerla() {
-  const l = LANDMARKS[3]!;
-  const g = new THREE.Group();
-  const body = box(9, 6, 8, cssVar("--timber"), true); body.position.y = 3; g.add(body);
-  const roof = pyramidRoof(9, 8, 4.5, "#241a12"); roof.position.y = 6 + 2.1; g.add(roof);
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 3), new THREE.MeshStandardMaterial({ color: cssVar("--timber"), metalness: 0 }));
-  post.position.set(5.2, 4.5, 0); g.add(post);
-  const sign = box(2.2, 1.4, 0.2, cssVar("--gold")); sign.position.set(5.2, 3.6, 1); g.add(sign);
-  g.position.set(l.x, l.y!, l.z);
-  scene.add(g);
-  l.mesh = g;
-})();
-
-(function buildRosengarten() {
-  const l = LANDMARKS[4]!;
-  const footprint = MAP.landmarks.rosengarten!.footprint!;
-  const ccx = footprint.reduce((s, p) => s + p[0], 0) / footprint.length;
-  const ccz = footprint.reduce((s, p) => s + p[1], 0) / footprint.length;
-  const local = footprint.map(([x, z]) => [x - ccx, z - ccz] as [number, number]);
-  const rMax = Math.max(...local.map(([x, z]) => Math.hypot(x, z)));
-
-  const g = new THREE.Group();
-  const terrace = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(footprintShape(local), { depth: 0.5, bevelEnabled: false }),
-    new THREE.MeshStandardMaterial({ color: cssVar("--sandstone"), flatShading: true, metalness: 0 })
-  );
-  terrace.rotateX(-Math.PI / 2);
-  g.add(terrace);
-  for (let i = 0; i < 12; i++) {
-    const ang = (i / 12) * Math.PI * 2;
-    const rad = rMax * 0.6;
-    const bush = new THREE.Mesh(new THREE.SphereGeometry(1.1, 6, 5), new THREE.MeshStandardMaterial({ color: i % 2 ? "#c96a8f" : "#5c7a45", flatShading: true, metalness: 0 }));
-    bush.position.set(Math.cos(ang) * rad, 1, Math.sin(ang) * rad);
-    g.add(bush);
-  }
-  g.position.set(l.x, l.y!, l.z);
-  scene.add(g);
-  l.mesh = g;
-})();
-
-(function buildConcordia() {
-  const l = LANDMARKS[5]!;
-  const footprint = MAP.landmarks.concordia!.footprint!;
-  const g = buildingFromFootprint(footprint, 7, "#d8b878", cssVar("--roof"));
-  g.position.set(l.x, l.y!, l.z);
-  scene.add(g);
-  l.mesh = g;
-})();
-
-(function buildFountain() {
-  const l = LANDMARKS[6]!;
-  const g = new THREE.Group();
-  const plaza = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 0.4, 20), new THREE.MeshStandardMaterial({ color: "#cbbfa4", metalness: 0 }));
-  plaza.position.y = 0.2; plaza.receiveShadow = true; g.add(plaza);
-  const basin = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.4, 1.2, 12), new THREE.MeshStandardMaterial({ color: cssVar("--sandstone-deep"), metalness: 0 }));
-  basin.position.y = 0.9; g.add(basin);
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 3, 8), new THREE.MeshStandardMaterial({ color: cssVar("--gold"), metalness: 0.6, roughness: 0.35 }));
-  pole.position.y = 2.5; g.add(pole);
-  const top2 = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 8), new THREE.MeshStandardMaterial({ color: cssVar("--gold-bright"), metalness: 0.6, roughness: 0.3 }));
-  top2.position.y = 4.2; g.add(top2);
-  g.position.set(l.x, l.y!, l.z);
-  scene.add(g);
-  l.mesh = g;
-})();
-
-// Neue Residenz -- real footprint, not a collectible, just authentic
-// background context for the Rosengarten right beside it.
-(function buildNeueResidenz() {
-  const footprint = MAP.landmarks.neue_residenz!.footprint!;
-  const center = MAP.landmarks.neue_residenz!.center;
-  const g = buildingFromFootprint(footprint, 10, cssVar("--sandstone"), cssVar("--roof"));
-  g.position.set(center[0], terrainHeight(center[0], center[1]), center[1]);
-  scene.add(g);
-})();
-} else {
-  buildCityLandmarks();
-}
+buildToyLandmarks();
 
 // ================= Decorative scatter: generic houses + trees =================
 // Real building footprints from the old town core (see bamberg-map-data.json)
 // stand in for the invented scatter this used to be -- same low-poly flat-
 // roofed treatment as everything else, but the actual street layout.
+// ---- Toy-town landmarks: detailed models from landmarks.ts, lined up with the real outline --------------------------
+/** Oriented box of a footprint: long-edge direction, size along/across it, centre. */
+function obb(fp: Footprint): { w: number; d: number; angle: number; cx: number; cz: number } {
+  let best = -1, ang = 0;
+  for (let i = 0; i < fp.length; i++) {
+    const a = fp[i]!, b = fp[(i + 1) % fp.length]!;
+    const len = Math.hypot(b[0]! - a[0]!, b[1]! - a[1]!);
+    if (len > best) { best = len; ang = Math.atan2(b[1]! - a[1]!, b[0]! - a[0]!); }
+  }
+  const c = Math.cos(ang), sn = Math.sin(ang);
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  for (const p of fp) { const u = p[0]! * c + p[1]! * sn, v = -p[0]! * sn + p[1]! * c; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+  let w = u1 - u0, d = v1 - v0;
+  const uc = (u0 + u1) / 2, vc = (v0 + v1) / 2;
+  if (d > w) { [w, d] = [d, w]; ang += Math.PI / 2; }
+  return { w, d, angle: ang, cx: uc * c - vc * sn, cz: uc * sn + vc * c };
+}
+/** Place a baked model: long side along the real outline's long side, front (+z) toward the town centre. */
+function placeModel(model: THREE.Object3D, x: number, z: number, o: { angle: number } | null): THREE.Object3D {
+  const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+  let yaw = o ? -o.angle + (size.z > size.x ? Math.PI / 2 : 0) : 0;
+  const tx = -x, tz = -z, tl2 = Math.hypot(tx, tz) || 1;
+  if (!o) yaw = Math.atan2(tx / tl2, tz / tl2);
+  else if (Math.sin(yaw) * tx + Math.cos(yaw) * tz < 0) yaw += Math.PI;
+  model.rotation.y = yaw;
+  model.position.set(x, terrainHeight(x, z), z);
+  scene.add(model);
+  return model;
+}
+function buildToyLandmarks() {
+  const models = LANDMARK_MODELS[CITY_ID] || {};
+  for (const l of LANDMARKS) {
+    const fp = MAP.landmarks[l.id]?.footprint as Footprint | undefined;
+    const o = fp && fp.length >= 3 ? obb(fp) : null;
+    const build = models[l.id];
+    if (!build) continue;
+    const model = bake(build(o ? o.w : 0, o ? o.d : 0));
+    // a paved toy base under every sight
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.14, 32), new THREE.MeshStandardMaterial({ color: "#eee2c8", roughness: 0.9 }));
+    const br = o ? Math.min(24, Math.hypot(o.w, o.d) / 2 + 3) : 8;
+    base.scale.set(br, 1, br); base.position.set(l.x, terrainHeight(l.x, l.z) + 0.04, l.z); base.receiveShadow = true;
+    if (!IS_OVERVIEW && l.kind !== "bridge") scene.add(base);
+    l.mesh = placeModel(model, l.x, l.z, o);
+  }
+  if (IS_BAMBERG && MAP.landmarks.neue_residenz?.footprint) {
+    const fp = MAP.landmarks.neue_residenz.footprint as Footprint, o = obb(fp);
+    placeModel(bake(neueResidenz(o.w, o.d)), MAP.landmarks.neue_residenz.center[0]!, MAP.landmarks.neue_residenz.center[1]!, o);
+  }
+}
+
 // ---- Generic landmarks for the OpenStreetMap cities: the real outline, taller, with the feature that makes each
 // kind recognisable (spires, a clock tower, a castle keep, a paved square with a fountain, a stone bridge deck).
 function localOf(fp: Footprint): [number, number][] {
@@ -1276,28 +1206,37 @@ function updateOcclusion(from: THREE.Vector3, to: THREE.Vector3) {
   fadedNow = hits;
 }
 
+// Filler houses: far fewer than the real town (the sights are the point), as cute toy houses, all merged into a handful
+// of meshes. HOUSE_RECTS are their footprints, for walking collision.
+const HOUSE_RECTS: Footprint[] = [];
 function scatterHouses() {
-  // Real German old towns are painted, not brown-on-brown -- the classic
-  // Fachwerk mix of ochre, rose, sky-blue and cream facades, cycled against
-  // the wall color (offset stride) so neighbors don't fall into a visible
-  // repeating pattern.
-  const wallColors = [
-    cssVar("--facade-yellow"), cssVar("--facade-pink"), cssVar("--facade-cream"),
-    cssVar("--facade-blue"), cssVar("--sandstone"), cssVar("--facade-teal"), cssVar("--sandstone-deep"),
-  ];
-  const roofColors = [cssVar("--roof"), cssVar("--timber"), "#8a3f36", "#5c4a35"];
-  MAP.scatter_buildings.forEach((b, idx) => {
-    const footprint = b.footprint;
-    const cx = footprint.reduce((s, p) => s + p[0], 0) / footprint.length;
-    const cz = footprint.reduce((s, p) => s + p[1], 0) / footprint.length;
-    const height = 3.5 + (idx % 4) * 0.9;
-    const wall = wallColors[idx % wallColors.length]!;
-    const roof = roofColors[(idx * 3 + 1) % roofColors.length]!;
-    const g = buildingFromFootprint(footprint, height, wall, roof, "hip");
-    g.position.set(cx, terrainHeight(cx, cz), cz);
-    scene.add(g);
-    occluders.push(g);
+  const walls = [TOY.plaster, TOY.rose, TOY.ochre, TOY.sky, TOY.salmon, TOY.mint, TOY.cream, TOY.yellow];
+  const roofs = [TOY.roof, TOY.roofDark, "#e27a4e"];
+  const lmR = LANDMARKS.map((l) => { const fp = MAP.landmarks[l.id]?.footprint as Footprint | undefined; const o = fp && fp.length >= 3 ? obb(fp) : null; return { x: l.x, z: l.z, r: o ? Math.hypot(o.w, o.d) / 2 + 7 : 16 }; });
+  const cand = MAP.scatter_buildings.map((b) => obb(b.footprint as Footprint))
+    .filter((o) => !lmR.some((l) => Math.hypot(l.x - o.cx, l.z - o.cz) < l.r) && distToRiver(o.cx, o.cz) > RIVER_HALF_W + 3);
+  const limit = IS_OVERVIEW ? cand.length : 130;
+  cand.sort((a, b) => Math.hypot(a.cx, a.cz) - Math.hypot(b.cx, b.cz));
+  const all = new THREE.Group();
+  // keep a gap between houses: no roof piles, room to walk and drive between them
+  const placed: { x: number; z: number; r: number }[] = [];
+  const picked: { o: ReturnType<typeof obb>; w: number; d: number }[] = [];
+  for (const o of cand) {
+    if (picked.length >= limit) break;
+    const w = IS_OVERVIEW ? o.w * 0.8 : Math.min(11, Math.max(4.5, o.w * 0.85)), d = IS_OVERVIEW ? o.d * 0.8 : Math.min(8, Math.max(4, o.d * 0.85));
+    const r = Math.hypot(w, d) / 2;
+    if (placed.some((p) => Math.hypot(p.x - o.cx, p.z - o.cz) < p.r + r + (IS_OVERVIEW ? 0.5 : 2.5))) continue;
+    placed.push({ x: o.cx, z: o.cz, r }); picked.push({ o, w, d });
+  }
+  picked.forEach(({ o, w, d }, i) => {
+    const h = toyHouse(w, d, IS_OVERVIEW ? 1 : 2 + (i % 3 === 0 ? 1 : 0), walls[i % walls.length]!, roofs[(i * 7) % roofs.length]!, i % 6 === 0);
+    h.rotation.y = -o.angle + (i % 2 ? Math.PI : 0);
+    h.position.set(o.cx, terrainHeight(o.cx, o.cz), o.cz);
+    all.add(h);
+    const c = Math.cos(o.angle), sn = Math.sin(o.angle);
+    HOUSE_RECTS.push([[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([u, v]) => [o.cx + u! * c - v! * sn, o.cz + u! * sn + v! * c]));
   });
+  scene.add(bake(all));
 }
 scatterHouses();
 
@@ -1380,11 +1319,11 @@ const trunkMesh = new THREE.InstancedMesh(
   new THREE.MeshStandardMaterial({ color: "#955f41", roughness: 0.9, metalness: 0 }),
   treePlacements.length
 );
-const pineGeo = mergeGeometries([ // three stacked tiers, widest at the bottom (local origin = crown centre)
+const pineGeo = IS_OVERVIEW ? mergeGeometries([ // three stacked tiers, widest at the bottom (local origin = crown centre)
   new THREE.ConeGeometry(1.9, 2.2, 7).translate(0, -0.9, 0),
   new THREE.ConeGeometry(1.5, 1.9, 7).translate(0, 0.3, 0),
   new THREE.ConeGeometry(1.05, 1.7, 7).translate(0, 1.35, 0),
-])!;
+])! : new THREE.IcosahedronGeometry(1.9, 1); // toy town: round lollipop crowns
 const crownMesh = new THREE.InstancedMesh(
   pineGeo,
   new THREE.MeshStandardMaterial({ color: "#4a916d", flatShading: true, roughness: 0.85, metalness: 0 }),
@@ -1401,7 +1340,7 @@ treePlacements.forEach((p, i) => {
   trunkMesh.setMatrixAt(i, treeMat4);
   treeMat4.compose(new THREE.Vector3(p.x, gy + 3.8 * p.scale, p.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (i * 2.39996) % 6.283), s);
   crownMesh.setMatrixAt(i, treeMat4);
-  crownMesh.setColorAt(i, new THREE.Color(i % 3 === 0 ? "#427c59" : i % 3 === 1 ? "#4a916d" : "#56a37b"));
+  crownMesh.setColorAt(i, new THREE.Color(IS_OVERVIEW ? (i % 3 === 0 ? "#427c59" : i % 3 === 1 ? "#4a916d" : "#56a37b") : (i % 3 === 0 ? "#5fbf45" : i % 3 === 1 ? "#77cf55" : "#4fae3f")));
 });
 trunkMesh.instanceMatrix.needsUpdate = true;
 crownMesh.instanceMatrix.needsUpdate = true;
@@ -1871,8 +1810,7 @@ type Solid = { poly: Footprint; minX: number; maxX: number; minZ: number; maxZ: 
 const SOLID_CELL = 20;
 const solidGrid = new Map<string, Solid[]>();
 (function buildSolids() {
-  for (const b of MAP.scatter_buildings) {
-    const f = b.footprint;
+  for (const f of HOUSE_RECTS) {
     const cx = f.reduce((a, p) => a + p[0]!, 0) / f.length, cz = f.reduce((a, p) => a + p[1]!, 0) / f.length;
     if (LANDMARKS.some((l) => Math.hypot(l.x - cx, l.z - cz) < 22)) continue;
     const xs = f.map((p) => p[0]!), zs = f.map((p) => p[1]!);
@@ -2455,6 +2393,7 @@ function resize() {
   const w = container.clientWidth, h = container.clientHeight;
   renderer.setSize(w, h);
   composer.setSize(w, h);
+  sizeTiltShift(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -2474,7 +2413,7 @@ const camTarget = new THREE.Vector3(0, 4, 0);
 // that angle on its own (doesn't snap back to "behind") while the target
 // keeps following the player every frame regardless of dragging.
 let occFrame = 0;
-let camYaw = 0, camPitch = IS_BAMBERG ? 0.62 : IS_OVERVIEW ? 0.95 : 0.86, camDist = IS_BAMBERG ? 30 : IS_OVERVIEW ? 110 : 34;
+let camYaw = 0, camPitch = IS_OVERVIEW ? 0.95 : 0.88, camDist = IS_OVERVIEW ? 110 : 44;
 // Karting gets its own chase-camera state -- closer, lower, and yaw-locked
 // behind the vehicle's heading by default (kartLookYaw is only a temporary
 // look-around offset from dragging, and springs back to 0 on release),

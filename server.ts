@@ -7,6 +7,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import index from "./public/index.html";
+import gallery from "./public/gallery.html";
 
 const PORT = Number(process.env.PORT || 3300);
 const DATA_DIR = join(import.meta.dir, "data");
@@ -57,6 +58,7 @@ const server = Bun.serve<{ id: string }>({
   port: PORT,
   routes: {
     "/": index,
+    "/gallery": gallery, // dev: all landmark models side by side
   },
   async fetch(req, server) {
     const url = new URL(req.url);
