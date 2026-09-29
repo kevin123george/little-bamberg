@@ -18,8 +18,16 @@ const CHARACTER_VARIANTS = ["a", "b", "c", "d", "e", "f"];
 const kartGltfPromise = gltfLoader.loadAsync("./models/kart/kart-oobi.glb");
 const characterGltfPromises = CHARACTER_VARIANTS.map((v) => gltfLoader.loadAsync(`./models/characters/character-${v}.glb`));
 
+// The 3D town keeps ONE palette whatever the page theme is (dark mode used to swap in muddy
+// grass, a dark river and cream "timber"); day vs night is the lighting's job, not the colours'.
+const WORLD_PALETTE: Record<string, string> = {
+  "--sandstone": "#e6cda6", "--sandstone-deep": "#cfae7e", "--regnitz": "#3d8a90", "--regnitz-deep": "#23585c",
+  "--roof": "#b8573f", "--timber": "#4a3526", "--grass": "#8aa75e", "--grass-deep": "#6f8c47",
+  "--facade-yellow": "#ecc973", "--facade-pink": "#e3a3a9", "--facade-blue": "#a6c2d2", "--facade-cream": "#f4e9cf",
+  "--facade-teal": "#8cb3a0", "--gold": "#c9922f", "--gold-bright": "#e2ae45", "--fog": "#d8cdb4",
+};
 function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return WORLD_PALETTE[name] ?? getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 type Footprint = number[][]; // each entry is [x, z]; matches the shape JSON imports infer
@@ -100,35 +108,41 @@ function footprintShape(footprint: Footprint): THREE.Shape {
 // (emissiveMap multiplies the emissive color per-texel, so only the window
 // texels should be non-black or the whole wall glows).
 function createWindowTextures(): { day: THREE.CanvasTexture; glow: THREE.CanvasTexture } {
-  const size = 96;
-  const w = size * 0.5, h = size * 0.64;
-  const x = (size - w) / 2, y = (size - h) / 2;
-
+  // One tile = 4x4 windows, so a building's windows don't all light up together at night.
+  const cell = 64, n = 4, size = cell * n;
+  const w = cell * 0.42, h = cell * 0.56;
   const dayCanvas = document.createElement("canvas");
   dayCanvas.width = size; dayCanvas.height = size;
-  const dctx = dayCanvas.getContext("2d")!;
-  dctx.fillStyle = "#ffffff";
-  dctx.fillRect(0, 0, size, size);
-  dctx.fillStyle = "#242c36";
-  dctx.fillRect(x, y, w, h);
-  dctx.fillStyle = "#48566a";
-  dctx.fillRect(x, y + h * 0.46, w, h * 0.08); // window-pane crossbar
-
+  const d = dayCanvas.getContext("2d")!;
+  d.fillStyle = "#ffffff"; d.fillRect(0, 0, size, size);
   const glowCanvas = document.createElement("canvas");
   glowCanvas.width = size; glowCanvas.height = size;
-  const gctx = glowCanvas.getContext("2d")!;
-  gctx.fillStyle = "#000000";
-  gctx.fillRect(0, 0, size, size);
-  gctx.fillStyle = "#ffe6a3";
-  gctx.fillRect(x, y, w, h);
-  gctx.fillStyle = "#000000";
-  gctx.fillRect(x, y + h * 0.46, w, h * 0.08); // crossbar stays dark even when lit
-
+  const g = glowCanvas.getContext("2d")!;
+  g.fillStyle = "#000000"; g.fillRect(0, 0, size, size);
+  const warm = ["#ffd88a", "#ffe3a8", "#ffc873", "#fff0cf", "#ffcf96"];
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const x = c * cell + (cell - w) / 2, y = r * cell + (cell - h) / 2;
+    d.fillStyle = "#d9d2c4"; d.fillRect(x - 3, y - 3, w + 6, h + 6);           // light frame
+    d.fillStyle = "#6f8397"; d.fillRect(x, y, w, h);                            // glass, sky-tinted
+    d.fillStyle = "#8ea2b4"; d.fillRect(x, y, w, h * 0.35);                     // reflection
+    d.fillStyle = "#d9d2c4"; d.fillRect(x + w / 2 - 1.5, y, 3, h); d.fillRect(x, y + h * 0.5 - 1.5, w, 3);
+    d.fillStyle = "#b9ad98"; d.fillRect(x - 5, y + h + 3, w + 10, 4);           // sill
+    if (rnd() < 0.62) {                                                          // lit at night
+      g.fillStyle = warm[Math.floor(rnd() * warm.length)]!;
+      g.globalAlpha = 0.55 + rnd() * 0.45;
+      g.fillRect(x, y, w, h);
+      g.globalAlpha = 1;
+      g.fillStyle = "#000000"; g.fillRect(x + w / 2 - 1.5, y, 3, h); g.fillRect(x, y + h * 0.5 - 1.5, w, 3);
+    }
+  }
   const mk = (canvas: HTMLCanvasElement) => {
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
     return tex;
   };
   return { day: mk(dayCanvas), glow: mk(glowCanvas) };
@@ -142,9 +156,9 @@ const { day: windowTexture, glow: windowGlowTexture } = createWindowTextures();
 // building regardless of its size, rather than something to be computed
 // per-building from perimeter/height (which is what produced wildly
 // stretched or aliased-into-hatching windows on different-sized buildings).
-const WINDOW_TILE_SIZE = 1.7; // world units per window -- denser than the first pass
-windowTexture.repeat.set(1 / WINDOW_TILE_SIZE, 1 / WINDOW_TILE_SIZE);
-windowGlowTexture.repeat.set(1 / WINDOW_TILE_SIZE, 1 / WINDOW_TILE_SIZE);
+const WINDOW_TILE_SIZE = 2.3; // world units per window (the texture holds 4x4 windows); wider spacing so walls read as walls
+windowTexture.repeat.set(1 / (WINDOW_TILE_SIZE * 4), 1 / (WINDOW_TILE_SIZE * 4));
+windowGlowTexture.repeat.set(1 / (WINDOW_TILE_SIZE * 4), 1 / (WINDOW_TILE_SIZE * 4));
 
 // Same fix, for the ground: a flat solid green plane is the same problem as
 // a flat solid-color wall. Mottled noise instead of a pattern, since grass
@@ -156,6 +170,18 @@ function createGrassTexture(): THREE.CanvasTexture {
   const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 26; i++) { // big soft patches (drawn wrapped so the tile edges don't show)
+    const px = Math.random() * size, py = Math.random() * size, pr = 18 + Math.random() * 40;
+    const shade = 0.8 + Math.random() * 0.35;
+    for (const [ox, oy] of [[0, 0], [size, 0], [-size, 0], [0, size], [0, -size]]) {
+      const grad = ctx.createRadialGradient(px + ox!, py + oy!, 0, px + ox!, py + oy!, pr);
+      const c = Math.round(shade * 255);
+      grad.addColorStop(0, `rgba(${Math.min(255, c)},${Math.min(255, c + 6)},${Math.min(255, c - 8)},0.35)`);
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(px + ox! - pr, py + oy! - pr, pr * 2, pr * 2);
+    }
+  }
   for (let i = 0; i < 2200; i++) {
     const shade = 0.72 + Math.random() * 0.56; // multiplies the material's own grass color, so stays theme-aware
     ctx.fillStyle = `rgba(${Math.round(shade * 255)},${Math.round(shade * 255)},${Math.round(shade * 255)},0.5)`;
@@ -267,7 +293,8 @@ function addDoor(g: THREE.Group, footprint: Footprint, height: number) {
 // coin flip per building so not every house has every window lit at once.
 const buildingWallMaterials: { mat: THREE.MeshStandardMaterial; lit: boolean }[] = [];
 function updateBuildingNightLights() {
-  for (const { mat, lit } of buildingWallMaterials) mat.emissiveIntensity = lit ? nightFactor * 1.4 : 0;
+  for (const { mat, lit } of buildingWallMaterials) mat.emissiveIntensity = lit ? nightFactor * 1.9 : 0;
+  if (scene.fog) (scene.fog as THREE.Fog).color.copy(FOG_DAY).lerp(FOG_NIGHT, nightFactor);
 }
 
 function buildingFromFootprint(footprint: Footprint, height: number, wallColor: string, roofColor: string, roofStyle: "flat" | "hip" = "flat"): THREE.Group {
@@ -281,11 +308,15 @@ function buildingFromFootprint(footprint: Footprint, height: number, wallColor: 
   // per-building clone or size-based scaling needed. emissiveMap reuses the
   // same window layout (inverted) so windows glow warm at night; intensity
   // starts at 0 and is driven by nightFactor (see updateBuildingNightLights).
+  // Each building samples the shared window pattern at its own offset, so neighbours light different windows.
+  const off = new THREE.Vector2(Math.floor(Math.random() * 4) / 4, Math.floor(Math.random() * 4) / 4);
+  const glow = windowGlowTexture.clone(); glow.offset.copy(off);
+  const day = windowTexture.clone(); day.offset.copy(off);
   const wallMat = new THREE.MeshStandardMaterial({
-    color: wallColor, map: windowTexture, flatShading: true, roughness: 0.9, metalness: 0,
-    emissive: 0xffe6a3, emissiveMap: windowGlowTexture, emissiveIntensity: 0,
+    color: wallColor, map: day, flatShading: true, roughness: 0.85, metalness: 0,
+    emissive: 0xffffff, emissiveMap: glow, emissiveIntensity: 0,
   });
-  buildingWallMaterials.push({ mat: wallMat, lit: Math.random() < 0.55 });
+  buildingWallMaterials.push({ mat: wallMat, lit: Math.random() < 0.85 });
   const body = new THREE.Mesh(
     new THREE.ExtrudeGeometry(footprintShape(local), { depth: height, bevelEnabled: false }),
     wallMat
@@ -441,7 +472,7 @@ const container = document.getElementById("world")!;
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0; // was 0.5 -- that was a global brightness cut meant to fix an overexposed sky, but it dimmed every material in the scene (buildings, characters, kart) along with it. The sky's own brightness is tuned independently below instead.
 container.innerHTML = ""; // defensive: never end up with two canvases stacked
@@ -465,9 +496,9 @@ let hemi: THREE.HemisphereLight;
 let ground: THREE.Mesh;
 let riverMesh: THREE.Mesh;
 
+const FOG_DAY = new THREE.Color("#d8cdb4"), FOG_NIGHT = new THREE.Color("#1c2233");
 function applyThemeColors() {
-  const fog = cssVar("--fog");
-  scene.fog = new THREE.Fog(new THREE.Color(fog).getHex(), 160, 650);
+  scene.fog = new THREE.Fog(FOG_DAY.clone().lerp(FOG_NIGHT, nightFactor).getHex(), 160, 650);
   if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(cssVar("--grass"));
   if (riverMesh) (riverMesh.material as THREE.MeshStandardMaterial).color.set(cssVar("--regnitz"));
 }
@@ -489,11 +520,32 @@ skyUniforms.mieCoefficient.value = 0.005;
 skyUniforms.mieDirectionalG.value = 0.8;
 skyUniforms.cloudCoverage.value = 0.22;
 skyUniforms.cloudDensity.value = 0.3;
+// The same sky, rendered into an environment map now and then (it changes slowly), so PBR materials pick up
+// sky-coloured light and the river actually reflects the sky instead of being a flat teal sheet.
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene();
+const envSky = new Sky();
+envSky.scale.setScalar(1000);
+envSky.material = sky.material;
+envScene.add(envSky);
+let envTarget: THREE.WebGLRenderTarget | null = null;
+function updateEnvironment(dayFactor: number) {
+  const next = pmrem.fromScene(envScene, 0.04);
+  scene.environment = next.texture;
+  scene.environmentIntensity = 0.12 + 0.5 * dayFactor;
+  envTarget?.dispose();
+  envTarget = next;
+}
 
 const HEMI_BASE_INTENSITY = 0.75, SUN_BASE_INTENSITY = 1.6;
 let nightFactor = 0; // 0 = full day, 1 = full night -- drives star/moon opacity and dims the ambient/sun together so the ground doesn't stay daylight-bright under a night sky
 
 const sunDir = new THREE.Vector3();
+const lightDir = new THREE.Vector3(0.3, 0.8, 0.2).normalize(); // where the shadow-casting light comes from (sun by day, moon by night)
+const MOON_LIGHT_DIR = new THREE.Vector3(-0.35, 0.85, 0.4).normalize();
+const SUN_COLOR_DAY = new THREE.Color(0xfff2d9), MOON_COLOR = new THREE.Color(0x9fb3ff);
+const HEMI_SKY_DAY = new THREE.Color(0xcfe6ee), HEMI_SKY_NIGHT = new THREE.Color(0x6f82b4);
+const HEMI_GROUND_DAY = new THREE.Color(0x7a6a4c), HEMI_GROUND_NIGHT = new THREE.Color(0x262833);
 // theta is in this game's own ground-plane convention: the OSM projection
 // (see the top of this file) made real east -> +x and real north -> -z, so
 // theta=0 points -z (north) and increases toward +x (east) as it grows --
@@ -503,7 +555,7 @@ function setSunAngle(elevationDeg: number, thetaDeg: number) {
   const theta = THREE.MathUtils.degToRad(thetaDeg);
   sunDir.setFromSphericalCoords(1, phi, theta);
   skyUniforms.sunPosition.value.copy(sunDir).multiplyScalar(400000);
-  sun.position.copy(sunDir).multiplyScalar(200);
+  // (sun.position/target follow the player every frame -- see the loop -- so shadows stay sharp)
 
   const dayFactor = THREE.MathUtils.clamp((elevationDeg + 6) / 16, 0, 1); // ramps through civil twilight instead of snapping at the horizon
   nightFactor = 1 - dayFactor;
@@ -511,8 +563,16 @@ function setSunAngle(elevationDeg: number, thetaDeg: number) {
   // people open at any hour, not a realism demo, so night keeps a much
   // higher light floor than physically accurate (moonlit-street brightness,
   // not actual darkness).
-  hemi.intensity = HEMI_BASE_INTENSITY * (0.65 + 0.35 * dayFactor);
-  sun.intensity = SUN_BASE_INTENSITY * (0.12 + 0.88 * dayFactor);
+  hemi.intensity = HEMI_BASE_INTENSITY * (0.7 + 0.3 * dayFactor);
+  hemi.color.copy(HEMI_SKY_DAY).lerp(HEMI_SKY_NIGHT, nightFactor);
+  hemi.groundColor.copy(HEMI_GROUND_DAY).lerp(HEMI_GROUND_NIGHT, nightFactor);
+  // the shadow-casting light turns into moonlight: from high up, cool blue, dimmer
+  lightDir.copy(sunDir).lerp(MOON_LIGHT_DIR, nightFactor).normalize();
+  if (lightDir.y < 0.25) { lightDir.y = 0.25; lightDir.normalize(); }
+  sun.color.copy(SUN_COLOR_DAY).lerp(MOON_COLOR, nightFactor);
+  sun.intensity = SUN_BASE_INTENSITY * (0.3 + 0.7 * dayFactor);
+  renderer.toneMappingExposure = 1.0 + 0.1 * nightFactor;
+  updateEnvironment(dayFactor);
   skyUniforms.showSunDisc.value = dayFactor > 0.02 ? 1 : 0;
   starMat.opacity = nightFactor * 0.9;
   // NOTE: does NOT call the building-window/street-lamp night-light updates
@@ -590,9 +650,17 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2d9, 1.6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -320, right: 320, top: 320, bottom: -320, near: 10, far: 500 });
-sun.shadow.bias = -0.0015;
+Object.assign(sun.shadow.camera, { left: -95, right: 95, top: 95, bottom: -95, near: 10, far: 420 });
+sun.shadow.bias = -0.0006;
+sun.shadow.normalBias = 0.35;
+sun.shadow.radius = 2.5;
 scene.add(sun);
+scene.add(sun.target);
+function followShadow(x: number, z: number) {
+  sun.target.position.set(x, 0, z);
+  sun.position.set(x + lightDir.x * 200, lightDir.y * 200, z + lightDir.z * 200);
+}
+followShadow(0, 0);
 
 // A scatter of stars on the inside of the sky dome (upper hemisphere only),
 // faded in/out with nightFactor rather than an on/off switch.
@@ -669,7 +737,7 @@ bot.slice().reverse().forEach((p) => riverShape.lineTo(p.x, p.y));
 riverShape.closePath();
 const riverGeo = new THREE.ShapeGeometry(riverShape);
 riverGeo.rotateX(-Math.PI / 2);
-riverMesh = new THREE.Mesh(riverGeo, new THREE.MeshStandardMaterial({ color: cssVar("--regnitz"), roughness: 0.35, metalness: 0.05 }));
+riverMesh = new THREE.Mesh(riverGeo, new THREE.MeshStandardMaterial({ color: cssVar("--regnitz"), roughness: 0.12, metalness: 0.35 }));
 riverMesh.position.y = 0.12;
 scene.add(riverMesh);
 
@@ -1451,6 +1519,73 @@ function variantForId(id: string): number {
   return h % CHARACTER_VARIANTS.length;
 }
 
+// ---- Walking collision: ordinary houses are solid (you slide along the wall). Landmarks and houses right next
+// to them stay walk-through, because landmarks are collected by getting within 13 m of their centre and some
+// are bigger than that. Starting inside a house never traps you: only ENTERING one is blocked.
+type Solid = { poly: Footprint; minX: number; maxX: number; minZ: number; maxZ: number };
+const SOLID_CELL = 20;
+const solidGrid = new Map<string, Solid[]>();
+(function buildSolids() {
+  for (const b of MAP.scatter_buildings) {
+    const f = b.footprint;
+    const cx = f.reduce((a, p) => a + p[0]!, 0) / f.length, cz = f.reduce((a, p) => a + p[1]!, 0) / f.length;
+    if (LANDMARKS.some((l) => Math.hypot(l.x - cx, l.z - cz) < 22)) continue;
+    const xs = f.map((p) => p[0]!), zs = f.map((p) => p[1]!);
+    const sd: Solid = { poly: f, minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) };
+    for (let gx = Math.floor(sd.minX / SOLID_CELL); gx <= Math.floor(sd.maxX / SOLID_CELL); gx++)
+      for (let gz = Math.floor(sd.minZ / SOLID_CELL); gz <= Math.floor(sd.maxZ / SOLID_CELL); gz++) {
+        const k = gx + "," + gz;
+        if (!solidGrid.has(k)) solidGrid.set(k, []);
+        solidGrid.get(k)!.push(sd);
+      }
+  }
+})();
+function insideSolid(x: number, z: number, pad = 0.7): boolean {
+  const list = solidGrid.get(Math.floor(x / SOLID_CELL) + "," + Math.floor(z / SOLID_CELL));
+  if (!list) return false;
+  for (const sd of list) {
+    if (x < sd.minX - pad || x > sd.maxX + pad || z < sd.minZ - pad || z > sd.maxZ + pad) continue;
+    const f = sd.poly;
+    let inside = false, near = false;
+    for (let i = 0, j = f.length - 1; i < f.length; j = i++) {
+      const [xi, zi] = f[i] as [number, number], [xj, zj] = f[j] as [number, number];
+      if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+      const ex = xj - xi, ez = zj - zi, L = ex * ex + ez * ez || 1;
+      const t = Math.max(0, Math.min(1, ((x - xi) * ex + (z - zi) * ez) / L));
+      if (Math.hypot(x - (xi + t * ex), z - (zi + t * ez)) < pad) near = true;
+    }
+    if (inside || near) return true;
+  }
+  return false;
+}
+/** Move the walker by (mx, mz), sliding along walls. Returns false when completely blocked. */
+function walkBy(mx: number, mz: number): boolean {
+  const clamp = (v: number) => Math.max(-HALF, Math.min(HALF, v));
+  const nx = clamp(player.x + mx), nz = clamp(player.z + mz);
+  if (insideSolid(player.x, player.z) || !insideSolid(nx, nz)) { player.x = nx; player.z = nz; return true; }
+  if (!insideSolid(nx, player.z)) { player.x = nx; return Math.abs(mx) > 1e-4; }
+  if (!insideSolid(player.x, nz)) { player.z = nz; return Math.abs(mz) > 1e-4; }
+  return false;
+}
+
+// ---- Guide: which uncollected landmark is nearest, and which way it is from where the camera looks.
+function updateGuide() {
+  const el = document.getElementById("guideHud")!;
+  const left = LANDMARKS.filter((l) => state.collected.indexOf(l.id) === -1);
+  if (!joined || !left.length) { el.style.display = "none"; return; }
+  const px = driving ? kartGroup.position.x : player.x, pz = driving ? kartGroup.position.z : player.z;
+  let best = left[0]!, bd = Infinity;
+  for (const l of left) { const d = Math.hypot(l.x - px, l.z - pz); if (d < bd) { bd = d; best = l; } }
+  // Direction in the camera's own space (x = screen right, -z = away from the camera), so the arrow always
+  // matches what's on screen whichever way the camera is turned; 0 rad = straight up.
+  const a = new THREE.Vector3(px, 0, pz).applyMatrix4(camera.matrixWorldInverse);
+  const t = new THREE.Vector3(best.x, 0, best.z).applyMatrix4(camera.matrixWorldInverse);
+  document.getElementById("guideArrow")!.style.transform = `rotate(${Math.atan2(t.x - a.x, -(t.z - a.z))}rad)`;
+  document.getElementById("guideName")!.textContent = tl(best).label + " · +" + best.points;
+  document.getElementById("guideDist")!.textContent = Math.round(bd) + " m";
+  el.style.display = "flex";
+}
+
 const player = { x: 10, z: 16, rotY: 0, mesh: null as THREE.Group | null, rig: null as AvatarRig | null, walkAmount: 0, speedEase: 0, speed: 26 }; // just outside the Rathaus's own footprint
 
 // ================= Player identity =================
@@ -2099,10 +2234,7 @@ function loop(t: number) {
       moveTarget = null; // manual input always overrides a pending click-to-move
       const len = Math.hypot(dx, dz);
       const nx = dx / len, nz = dz / len;
-      player.x += nx * player.speed * mag * player.speedEase * dt;
-      player.z += nz * player.speed * mag * player.speedEase * dt;
-      player.x = Math.max(-HALF, Math.min(HALF, player.x));
-      player.z = Math.max(-HALF, Math.min(HALF, player.z));
+      walkBy(nx * player.speed * mag * player.speedEase * dt, nz * player.speed * mag * player.speedEase * dt);
       const targetRot = Math.atan2(nx, nz);
       const diff = ((targetRot - player.rotY + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       player.rotY += diff * Math.min(1, dt * 10);
@@ -2112,10 +2244,9 @@ function loop(t: number) {
       const dist = Math.hypot(tdx, tdz);
       if (dist > 0.6) {
         const nx = tdx / dist, nz = tdz / dist;
-        player.x += nx * player.speed * player.speedEase * dt;
-        player.z += nz * player.speed * player.speedEase * dt;
-        player.x = Math.max(-HALF, Math.min(HALF, player.x));
-        player.z = Math.max(-HALF, Math.min(HALF, player.z));
+        if (!walkBy(nx * player.speed * player.speedEase * dt, nz * player.speed * player.speedEase * dt) && player.speedEase > 0.9) {
+          moveTarget = null; // walked into a wall on the way to a clicked spot: stop instead of pushing forever
+        }
         const targetRot = Math.atan2(nx, nz);
         const diff = ((targetRot - player.rotY + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
         player.rotY += diff * Math.min(1, dt * 10);
@@ -2151,6 +2282,8 @@ function loop(t: number) {
 
   camera.position.copy(camPos);
   camera.lookAt(camTarget);
+  followShadow(camTarget.x, camTarget.z);
+  updateGuide();
 
   Object.keys(peers).forEach((pid) => {
     const p = peers[pid]!;

@@ -106,6 +106,12 @@
   }
   #scoreHud { top: 16px; left: 16px; font-variant-numeric: tabular-nums; display: none; }
   #scoreHud .label { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; }
+  #guideHud { top: 70px; left: 16px; display: none; gap: 10px; align-items: center; max-width: 60vw; }
+  #guideArrow { display: block; flex-shrink: 0; color: var(--gold); transform-origin: 50% 50%; transition: transform 0.12s linear; }
+  #guideHud .g-text { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+  #guideName { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #guideDist { font-size: 11.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  @media (max-width: 600px) { #scoreHud { top: 66px; } #guideHud { top: 120px; } } /* below the button row, which spans the width on phones */
   #scoreHud .value { font-family: "Noto Serif Malayalam", serif; font-size: 20px; font-weight: 700; color: var(--regnitz); }
   #scoreTotal { font-family: "Noto Sans Malayalam", sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
   #topRightHud { position: absolute; top: 16px; right: 16px; display: none; gap: 10px; }
@@ -215,6 +221,10 @@
   <div class="hud" id="scoreHud">
     <span class="label" id="txtScoreLabel"></span>
     <span class="value"><span id="scoreValue">0</span><span id="scoreTotal"></span></span>
+  </div>
+  <div class="hud" id="guideHud" aria-live="polite">
+    <svg id="guideArrow" aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path d="M12 2 L20 21 L12 16.5 L4 21 Z" fill="currentColor"/></svg>
+    <span class="g-text"><span id="guideName"></span><span id="guideDist"></span></span>
   </div>
   <div id="topRightHud">
     <button class="hudBtn" id="langToggleGame"></button>
