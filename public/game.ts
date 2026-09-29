@@ -1588,7 +1588,7 @@ LANDMARKS.forEach((l) => {
 const FROM_CITY = new URLSearchParams(location.search).get("from") || "nuernberg";
 const FROM_GATE = (CITY.portals || []).find((p) => p.id === FROM_CITY) || (CITY.portals || [])[0];
 const PLAYER_SPAWN = IS_BAMBERG ? { x: 10, z: 16 } : IS_OVERVIEW && FROM_GATE ? { x: FROM_GATE.x + 20, z: FROM_GATE.z + 22 } : freeSpot(8, 8);
-const KART_SPAWN = IS_BAMBERG ? { x: 15, z: 21 } : IS_OVERVIEW ? { x: PLAYER_SPAWN.x + 3, z: PLAYER_SPAWN.z + 2 } : freeSpot(PLAYER_SPAWN.x + 6, PLAYER_SPAWN.z + 6); // parked a few steps from the player
+const KART_SPAWN = IS_BAMBERG ? { x: 13, z: 19 } : IS_OVERVIEW ? { x: PLAYER_SPAWN.x + 3, z: PLAYER_SPAWN.z + 2 } : freeSpot(PLAYER_SPAWN.x + 3, PLAYER_SPAWN.z + 2); // parked within reach of the player (E works from 5 m)
 // Dimensions measured directly from the Kenney kart-oobi glTF's own accessor
 // bounds (see the offline Python bounding-box extraction used while
 // integrating it), not eyeballed -- the physics collider matches the real
@@ -1601,6 +1601,11 @@ const chassisShapeOffset = new CANNON.Vec3(0, 0.377, 0.112); // center of the bo
 const chassisBody = new CANNON.Body({ mass: 55 }); // was 140 for the old, much larger primitive box -- this real kart is a smaller volume
 chassisBody.addShape(new CANNON.Box(chassisHalfExtents), chassisShapeOffset);
 chassisBody.position.set(KART_SPAWN.x, terrainHeight(KART_SPAWN.x, KART_SPAWN.z) + 2, KART_SPAWN.z);
+// The engine pushes at the wheels, well below this light kart's centre of mass, so full throttle used to flip it onto its
+// tail within half a second (then no wheel touched the ground and it barely moved). An arcade kart only needs to turn:
+// no pitch or roll, a little damping.
+chassisBody.angularFactor.set(0, 1, 0);
+chassisBody.angularDamping = 0.4;
 
 // ---- Kart audio: synthesized (no sound files to fetch/license), started
 // lazily on first entry since browsers require a user gesture -- "E" to
@@ -1684,6 +1689,7 @@ const wheelBaseOptions: CANNON.WheelInfoOptions = {
   useCustomSlidingRotationalSpeed: true,
 };
 const WHEEL_FL = 0, WHEEL_FR = 1, WHEEL_BL = 2, WHEEL_BR = 3;
+const WHEEL_MOUNT = 0.25; // the physics body now rides this much higher; the model is drawn this much lower to match
 // Exact translations of the model's own wheel-front-left/-right/-back-left/
 // -right nodes (measured, not guessed) -- order matters here, it lines up
 // with WHEEL_FL..WHEEL_BR above and with the named-node lookup used to grab
@@ -1695,7 +1701,9 @@ const wheelConnectionPoints: [number, number][] = [
   [-0.277372271, -0.3606073], // back right
 ];
 wheelConnectionPoints.forEach(([wx, wz]) => {
-  kartVehicle.addWheel({ ...wheelBaseOptions, chassisConnectionPointLocal: new CANNON.Vec3(wx, 0, wz) });
+  // mounted WHEEL_MOUNT above the body's origin: after a hard landing the body can bottom out on the ground, and rays that
+  // start at ground level (as before) then never hit anything again -- the kart was stuck for good
+  kartVehicle.addWheel({ ...wheelBaseOptions, chassisConnectionPointLocal: new CANNON.Vec3(wx, WHEEL_MOUNT, wz) });
 });
 kartVehicle.addToWorld(physicsWorld);
 
@@ -1719,7 +1727,7 @@ const kartWheelMeshes: THREE.Object3D[] = ["wheel-front-left", "wheel-front-righ
   return node;
 });
 scene.add(kartGroup);
-kartGroup.position.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
+kartGroup.position.set(chassisBody.position.x, chassisBody.position.y - WHEEL_MOUNT, chassisBody.position.z);
 for (let i = 0; i < 4; i++) {
   kartVehicle.updateWheelTransform(i);
   const wt = kartVehicle.wheelInfos[i]!.worldTransform;
@@ -1739,9 +1747,11 @@ const rampX = KART_SPAWN.x, rampZ = KART_SPAWN.z + 18;
 const rampBaseY = terrainHeight(rampX, rampZ);
 const rampBody = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
 rampBody.addShape(new CANNON.Box(new CANNON.Vec3(RAMP_WIDTH / 2, RAMP_THICK / 2, RAMP_LEN / 2)));
-rampBody.position.set(rampX, rampBaseY + (RAMP_THICK / 2) * Math.cos(RAMP_ANGLE) + (RAMP_LEN / 2) * Math.sin(RAMP_ANGLE), rampZ);
+// sunk by its own thickness so the low end is flush with the ground: a 0.5 m lip used to stop the kart dead
+rampBody.position.set(rampX, rampBaseY - (RAMP_THICK / 2) * Math.cos(RAMP_ANGLE) + (RAMP_LEN / 2) * Math.sin(RAMP_ANGLE), rampZ);
 rampBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -RAMP_ANGLE);
-physicsWorld.addBody(rampBody);
+const HAS_RAMP = IS_BAMBERG || IS_OVERVIEW; // the dense old towns have no room for it
+if (HAS_RAMP) physicsWorld.addBody(rampBody);
 const rampMesh = new THREE.Mesh(
   new THREE.BoxGeometry(RAMP_WIDTH, RAMP_THICK, RAMP_LEN),
   new THREE.MeshStandardMaterial({ color: cssVar("--facade-yellow"), flatShading: true, roughness: 0.85, metalness: 0 })
@@ -1750,13 +1760,13 @@ rampMesh.position.set(rampBody.position.x, rampBody.position.y, rampBody.positio
 rampMesh.quaternion.set(rampBody.quaternion.x, rampBody.quaternion.y, rampBody.quaternion.z, rampBody.quaternion.w);
 rampMesh.castShadow = true;
 rampMesh.receiveShadow = true;
-scene.add(rampMesh);
+if (HAS_RAMP) scene.add(rampMesh);
 
 let driving = false;
 let nearKart = false;
 let kartSteer = 0;
 const KART_MAX_STEER = 0.5;
-const KART_ENGINE_FORCE = 1800;
+const KART_ENGINE_FORCE = 700; // per rear wheel; 1800 on a 55 kg kart was a rocket that flipped it
 const KART_MAX_SPEED = 24; // m/s-ish before engine force cuts out
 
 function enterKart() {
@@ -2515,6 +2525,11 @@ function updateLabel(el: HTMLDivElement, worldPos: THREE.Vector3) {
 
 let lastT: number | null = null;
 let lastSunSyncAt = 0;
+// ?debug: expose game state for automated play-testing (read-only use)
+if (new URLSearchParams(location.search).has("debug")) {
+  (window as any).__lb = { player, get driving() { return driving; }, get nearKart() { return nearKart; }, kart: () => chassisBody.position, KART_SPAWN, PLAYER_SPAWN, body: chassisBody, vehicle: kartVehicle, world: physicsWorld, hf: heightfieldBody };
+}
+
 function loop(t: number) {
   if (lastT === null) lastT = t;
   const dt = Math.min(0.05, (t - lastT) / 1000);
@@ -2578,7 +2593,7 @@ function loop(t: number) {
 
     physicsWorld.step(1 / 60, dt, 5);
 
-    kartGroup.position.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
+    kartGroup.position.set(chassisBody.position.x, chassisBody.position.y - WHEEL_MOUNT, chassisBody.position.z);
     kartGroup.quaternion.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
     for (let i = 0; i < 4; i++) {
       kartVehicle.updateWheelTransform(i);

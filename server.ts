@@ -112,7 +112,9 @@ const server = Bun.serve<{ id: string }>({
         return;
       }
       if (msg.type === "presence") {
-        server.publish(
+        // ws.publish reaches every OTHER player; server.publish also echoed your own position back to you, which drew
+        // a second copy of you following yourself around
+        ws.publish(
           ROOM_TOPIC,
           JSON.stringify({ type: "presence", id: ws.data.id, x: msg.x, z: msg.z, rotY: msg.rotY, name: msg.name, city: typeof msg.city === "string" ? msg.city.slice(0, 24) : "bamberg" })
         );
