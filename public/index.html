@@ -121,6 +121,24 @@
     cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap;
   }
   .hudBtn:hover { background: var(--surface-2); }
+  #travel { position: fixed; inset: 0; z-index: 60; background: rgba(20, 16, 12, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #travel[hidden] { display: none; }
+  .travel-card { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 16px 48px var(--shadow);
+    width: min(680px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 18px 18px 14px; }
+  .travel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .travel-head h2 { margin: 0; font-size: 20px; }
+  .travel-note { margin: 6px 0 10px; font-size: 13px; color: var(--ink-soft); }
+  #travelMap { width: 100%; height: auto; display: block; }
+  #travelMap .land { fill: var(--surface-2); stroke: var(--ink-soft); stroke-width: 1.5; stroke-linejoin: round; }
+  #travelMap .rail { stroke: var(--gold); stroke-width: 1.5; stroke-dasharray: 5 5; fill: none; opacity: 0.7; }
+  #travelMap .city { cursor: pointer; }
+  #travelMap .city circle { fill: var(--regnitz); stroke: var(--surface); stroke-width: 2.5; transition: r 0.12s; }
+  #travelMap .city:hover circle, #travelMap .city:focus circle { r: 11; }
+  #travelMap .city.here circle { fill: var(--gold); }
+  #travelMap .city text { font-size: 15px; font-weight: 700; fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+  #travelMap .city .sub { font-size: 12px; font-weight: 600; fill: var(--ink-soft); }
+  #travelList { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  #travelList button { font: inherit; font-size: 13px; }
   #board {
     position: absolute; top: 66px; right: 16px; width: 240px; max-height: 60%; overflow-y: auto;
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -207,6 +225,7 @@
     <div class="card">
       <div class="topRow">
         <button class="chip" id="langToggle" type="button"></button>
+        <button class="chip" id="travelToggleHero" type="button"></button>
       </div>
       <p class="eyebrow" id="txtEyebrow"></p>
       <h1 id="txtTitle"></h1>
@@ -227,10 +246,19 @@
     <span class="g-text"><span id="guideName"></span><span id="guideDist"></span></span>
   </div>
   <div id="topRightHud">
+    <button class="hudBtn" id="travelToggle"></button>
     <button class="hudBtn" id="langToggleGame"></button>
     <button class="hudBtn" id="dayNightToggle"></button>
     <button class="hudBtn" id="weatherToggle"></button>
     <button class="hudBtn" id="boardToggle"></button>
+  </div>
+  <div id="travel" role="dialog" aria-modal="true" aria-labelledby="travelTitle" hidden>
+    <div class="travel-card">
+      <div class="travel-head"><h2 id="travelTitle"></h2><button class="chip" id="travelClose" type="button"></button></div>
+      <p class="travel-note" id="travelNote"></p>
+      <svg id="travelMap" viewBox="0 0 640 520" role="img"></svg>
+      <div id="travelList"></div>
+    </div>
   </div>
   <div id="board">
     <h2 id="txtBoardTitle"></h2>

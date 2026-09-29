@@ -51,7 +51,7 @@ function topPlayers(limit: number) {
 // it out to everyone else under one shared topic. No server-side state
 // kept beyond the socket list -- presence is ephemeral by design.
 const ROOM_TOPIC = "presence";
-type ClientMsg = { type: "presence"; x: number; z: number; rotY: number; name: string };
+type ClientMsg = { type: "presence"; x: number; z: number; rotY: number; name: string; city?: string };
 
 const server = Bun.serve<{ id: string }>({
   port: PORT,
@@ -114,7 +114,7 @@ const server = Bun.serve<{ id: string }>({
       if (msg.type === "presence") {
         server.publish(
           ROOM_TOPIC,
-          JSON.stringify({ type: "presence", id: ws.data.id, x: msg.x, z: msg.z, rotY: msg.rotY, name: msg.name })
+          JSON.stringify({ type: "presence", id: ws.data.id, x: msg.x, z: msg.z, rotY: msg.rotY, name: msg.name, city: typeof msg.city === "string" ? msg.city.slice(0, 24) : "bamberg" })
         );
       }
     },

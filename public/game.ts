@@ -6,7 +6,40 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import mapData from "./bamberg-map-data.json";
+import bambergData from "./bamberg-map-data.json";
+import muenchenData from "./maps/muenchen.json";
+import nuernbergData from "./maps/nuernberg.json";
+import wuerzburgData from "./maps/wuerzburg.json";
+import regensburgData from "./maps/regensburg.json";
+import erlangenData from "./maps/erlangen.json";
+import augsburgData from "./maps/augsburg.json";
+import bavariaOutline from "./bavaria.json";
+
+// ================= Which city (Little Bavaria) =================
+// Bamberg keeps its hand-built landmarks; every other city comes from scripts/build_cities.py (OpenStreetMap) with
+// a "meta" block (names, landmark texts, kinds, points, river width, hills), so it needs no code of its own.
+// The city is chosen with ?city=<id> (the travel map sets it); the last one played is remembered.
+type CityMeta = {
+  id: string; name_en: string; name_ml: string; latlon: number[]; river_half_width: number;
+  hills: { cx: number; cz: number; r: number; h: number }[];
+  landmarks: { id: string; kind: string; points: number; label_en: string; flavor_en: string; label_ml: string; flavor_ml: string }[];
+};
+const CITY_MAPS: Record<string, any> = {
+  bamberg: bambergData, muenchen: muenchenData, nuernberg: nuernbergData, wuerzburg: wuerzburgData,
+  regensburg: regensburgData, erlangen: erlangenData, augsburg: augsburgData,
+};
+const BAMBERG_META: CityMeta = { id: "bamberg", name_en: "Bamberg", name_ml: "ബാംബെർഗ്", latlon: [49.8918, 10.8869], river_half_width: 6, hills: [], landmarks: [] };
+const CITY_ID: string = (() => {
+  let id = new URLSearchParams(location.search).get("city") || "";
+  if (!CITY_MAPS[id]) { try { id = localStorage.getItem("littleBamberg.city") || ""; } catch (e) {} }
+  if (!CITY_MAPS[id]) id = "bamberg";
+  try { localStorage.setItem("littleBamberg.city", id); } catch (e) {}
+  return id;
+})();
+const IS_BAMBERG = CITY_ID === "bamberg";
+const mapData = CITY_MAPS[CITY_ID];
+const CITY: CityMeta = mapData.meta ?? BAMBERG_META;
+const ALL_CITIES: CityMeta[] = Object.keys(CITY_MAPS).map((k) => CITY_MAPS[k].meta ?? BAMBERG_META);
 
 // Real modeled assets (CC0, Kenney.nl -- "Car Kit" and "Blocky Characters")
 // instead of hand-built box primitives. Fetches start immediately here so
@@ -57,16 +90,44 @@ function hillBump(x: number, z: number, cx: number, cz: number, radius: number, 
 // Domberg centered on the real Dom; Michaelsberg centered on the real
 // Michaelsberger Garten -- both hillBump()'d the same stylized way as
 // before, just anchored to their real positions now instead of invented ones.
-const DOMBERG = { cx: MAP.landmarks.dom!.center[0], cz: MAP.landmarks.dom!.center[1], r: 100, h: 17 };
+const DOMBERG = IS_BAMBERG ? { cx: MAP.landmarks.dom!.center[0]!, cz: MAP.landmarks.dom!.center[1]!, r: 100, h: 17 } : { cx: 0, cz: 0, r: 1, h: 0 };
 const MICHAELSBERG = { cx: -264, cz: -138, r: 90, h: 14 };
+const CITY_HILLS = IS_BAMBERG ? [DOMBERG, MICHAELSBERG] : CITY.hills;
 function terrainHeight(x: number, z: number): number {
-  return (
-    hillBump(x, z, DOMBERG.cx, DOMBERG.cz, DOMBERG.r, DOMBERG.h) +
-    hillBump(x, z, MICHAELSBERG.cx, MICHAELSBERG.cz, MICHAELSBERG.r, MICHAELSBERG.h)
-  );
+  let y = 0;
+  for (const hl of CITY_HILLS) y += hillBump(x, z, hl.cx, hl.cz, hl.r, hl.h);
+  return y;
 }
 
-const RIVER_HALF_W = 6; // half-width of the extruded river ribbon, in scaled meters
+const RIVER_HALF_W = IS_BAMBERG ? 6 : (CITY.river_half_width || 6); // half-width of the extruded river ribbon, in scaled meters
+
+// A spot near (x0, z0) that isn't inside a building, a landmark or the river (spiral search), for spawns.
+function pointInPoly(x: number, z: number, f: Footprint): boolean {
+  let inside = false;
+  for (let i = 0, j = f.length - 1; i < f.length; j = i++) {
+    const [xi, zi] = f[i] as [number, number], [xj, zj] = f[j] as [number, number];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function freeSpot(x0: number, z0: number): { x: number; z: number } {
+  // prefer a point on a real street near (x0, z0): courtyards are "free" too, but you can't see or leave them
+  const polysAll: Footprint[] = [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
+  const clear = (x: number, z: number) => distToRiver(x, z) >= RIVER_HALF_W + 4 &&
+    !polysAll.some((f) => pointInPoly(x, z, f) || pointInPoly(x + 3, z, f) || pointInPoly(x - 3, z, f) || pointInPoly(x, z + 3, f) || pointInPoly(x, z - 3, f));
+  const roadPts = MAP.roads.flatMap((r) => r.line).map((p) => ({ x: p[0]!, z: p[1]!, d: Math.hypot(p[0]! - x0, p[1]! - z0) }))
+    .filter((p) => p.d < 120).sort((a, b) => a.d - b.d);
+  for (const p of roadPts) if (clear(p.x, p.z)) return { x: p.x, z: p.z };
+  const polys: Footprint[] = [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
+  for (let r = 0; r < 160; r += 2) {
+    for (let a = 0; a < 16; a++) {
+      const x = x0 + Math.cos((a / 16) * Math.PI * 2) * r, z = z0 + Math.sin((a / 16) * Math.PI * 2) * r;
+      if (distToRiver(x, z) < RIVER_HALF_W + 4) continue;
+      if (!polys.some((f) => pointInPoly(x, z, f) || pointInPoly(x + 3, z, f) || pointInPoly(x - 3, z, f) || pointInPoly(x, z + 3, f) || pointInPoly(x, z - 3, f))) return { x, z };
+    }
+  }
+  return { x: x0, z: z0 };
+}
 
 // Nearest distance from (x,z) to the real river polyline -- used to keep
 // trees and scatter buildings from sprouting out of the water.
@@ -356,6 +417,7 @@ function buildingFromFootprint(footprint: Footprint, height: number, wallColor: 
 // ================= Landmarks (collectible) =================
 interface Landmark {
   id: string;
+  kind?: string;
   label: string;
   points: number;
   x: number;
@@ -366,7 +428,7 @@ interface Landmark {
 }
 // x/z below are the real OSM-derived positions (MAP.landmarks[id].center) --
 // see bamberg-map-data.json. Only label/points/flavor are hand-written.
-const LANDMARKS: Landmark[] = [
+const LANDMARKS: Landmark[] = IS_BAMBERG ? [
   { id: "rathaus", label: "ആൽട്ടെസ് റാത്ത്ഹൗസ്", points: 20, x: MAP.landmarks.rathaus!.center[0], z: MAP.landmarks.rathaus!.center[1], flavor: "പാലത്തിന് നടുവിൽ നിൽക്കുന്ന നഗരസഭാ മന്ദിരം!" },
   { id: "dom", label: "ബാംബെർഗ് ഡോം", points: 25, x: MAP.landmarks.dom!.center[0], z: MAP.landmarks.dom!.center[1], flavor: "നാല് ഗോപുരങ്ങളുള്ള പുരാതന കത്തീഡ്രൽ." },
   { id: "venedig", label: "ക്ലൈൻ വെനെഡിഗ്", points: 20, x: MAP.landmarks.venedig!.center[0], z: MAP.landmarks.venedig!.center[1], flavor: "നദിക്കരയിലെ ചെറിയ വെനീസ്!" },
@@ -374,7 +436,14 @@ const LANDMARKS: Landmark[] = [
   { id: "rosengarten", label: "റോസൻഗാർട്ടൻ", points: 15, x: MAP.landmarks.rosengarten!.center[0], z: MAP.landmarks.rosengarten!.center[1], flavor: "കുന്നിൻ മുകളിലെ പനിനീർ ഉദ്യാനം." },
   { id: "concordia", label: "കോൺകോർഡിയ", points: 15, x: MAP.landmarks.concordia!.center[0], z: MAP.landmarks.concordia!.center[1], flavor: "നദിക്കരയിലെ പഴയ മാളിക." },
   { id: "maxplatz", label: "മാക്സ്പ്ലാറ്റ്സ്", points: 15, x: MAP.landmarks.maxplatz!.center[0], z: MAP.landmarks.maxplatz!.center[1], flavor: "നീരുറവയുള്ള പഴയ ചന്തസ്ഥലം." },
-];
+] : CITY.landmarks.map((l) => ({
+  id: l.id, kind: l.kind, label: l.label_ml, flavor: l.flavor_ml, points: l.points,
+  x: MAP.landmarks[l.id]!.center[0]!, z: MAP.landmarks[l.id]!.center[1]!,
+}));
+/** How a landmark is stored in the player's collected list: Bamberg keeps its old ids, other cities are prefixed. */
+function lmKey(l: Landmark): string { return IS_BAMBERG ? l.id : CITY_ID + ":" + l.id; }
+function isCollected(l: Landmark): boolean { return state.collected.indexOf(lmKey(l)) !== -1; }
+function cityScore(): number { return LANDMARKS.filter(isCollected).reduce((a, l) => a + l.points, 0); }
 const TOTAL_POSSIBLE = LANDMARKS.reduce((s, l) => s + l.points, 0);
 LANDMARKS.forEach((l) => { l.y = terrainHeight(l.x, l.z); });
 
@@ -392,6 +461,7 @@ const LANDMARK_EN: Record<string, { label: string; flavor: string }> = {
   concordia: { label: "Concordia", flavor: "An old villa on the riverbank." },
   maxplatz: { label: "Maxplatz", flavor: "The old market square with a fountain." },
 };
+if (!IS_BAMBERG) CITY.landmarks.forEach((l) => { LANDMARK_EN[l.id] = { label: l.label_en, flavor: l.flavor_en }; });
 function tl(l: Landmark): { label: string; flavor: string } {
   if (lang === "en" && LANDMARK_EN[l.id]) return LANDMARK_EN[l.id]!;
   return { label: l.label, flavor: l.flavor };
@@ -403,10 +473,10 @@ try { lang = (localStorage.getItem("littleBamberg.lang") as Lang) || "ml"; } cat
 
 const UI_TEXT: Record<Lang, Record<string, string>> = {
   ml: {
-    title: "ലിറ്റിൽ ബാംബെർഗ്",
-    loading: "ബാംബെർഗ് ഉണ്ടാക്കുന്നു…",
+    title: "ലിറ്റിൽ " + CITY.name_ml,
+    loading: CITY.name_ml + " ഉണ്ടാക്കുന്നു…",
     eyebrow: "ജർമനിയിലെ മലയാളികൾക്കായി",
-    tagline: "ബാംബെർഗ് ചുറ്റി നടന്ന് പോയിന്റ് ശേഖരിക്കൂ. മറ്റുള്ളവർ അതേ സമയം അവിടെ നടക്കുന്നുണ്ടാവും.",
+    tagline: CITY.name_ml + " ചുറ്റി നടന്ന് പോയിന്റ് ശേഖരിക്കൂ. മറ്റുള്ളവർ അതേ സമയം അവിടെ നടക്കുന്നുണ്ടാവും.",
     nameLabel: "നിങ്ങളുടെ പേര്",
     namePlaceholder: "ഉദാ: അനു",
     joinCta: "കളി തുടങ്ങൂ →",
@@ -421,7 +491,13 @@ const UI_TEXT: Record<Lang, Record<string, string>> = {
     carPrompt: "കാറിൽ കയറാൻ E അമർത്തൂ",
     youSuffix: "(നീ)",
     collectedPrefix: "ശേഖരിച്ചു: ",
-    completeLabel: "ബാംബെർഗ് പൂർത്തിയായി",
+    completeLabel: CITY.name_ml + " പൂർത്തിയായി",
+    travel: "യാത്ര",
+    travelTitle: "ബവേറിയയിൽ എവിടേക്ക്?",
+    travelNote: "ഓരോ നഗരത്തിലും 125 പോയിന്റ്. എല്ലാ നഗരങ്ങളിലെയും പോയിന്റുകൾ ലീഡർബോർഡിൽ ഒന്നിച്ച്.",
+    travelHere: "നിങ്ങൾ ഇവിടെ",
+    travelClose: "അടയ്ക്കുക",
+    travelling: "യാത്ര ചെയ്യുന്നു…",
     completeFlavor: "എല്ലാ സ്ഥലങ്ങളും കണ്ടു. കൊള്ളാം!",
     langChip: "English",
     sunAuto: "തത്സമയം",
@@ -433,10 +509,10 @@ const UI_TEXT: Record<Lang, Record<string, string>> = {
     weatherSnow: "മഞ്ഞ്",
   },
   en: {
-    title: "Little Bamberg",
-    loading: "Building Bamberg…",
+    title: "Little " + CITY.name_en,
+    loading: "Building " + CITY.name_en + "…",
     eyebrow: "For German Malayalis",
-    tagline: "Walk around Bamberg and collect points. Others are probably walking around at the same time.",
+    tagline: "Walk around " + CITY.name_en + " and collect points. Others are probably walking around at the same time.",
     nameLabel: "Your name",
     namePlaceholder: "e.g. Anu",
     joinCta: "Start playing →",
@@ -451,7 +527,13 @@ const UI_TEXT: Record<Lang, Record<string, string>> = {
     carPrompt: "Press E to get in the car",
     youSuffix: "(you)",
     collectedPrefix: "Collected: ",
-    completeLabel: "Bamberg complete",
+    completeLabel: CITY.name_en + " complete",
+    travel: "Travel",
+    travelTitle: "Where to in Bavaria?",
+    travelNote: "125 points in every city. Points from all cities add up on the leaderboard.",
+    travelHere: "You are here",
+    travelClose: "Close",
+    travelling: "Travelling…",
     completeFlavor: "You've seen every sight. Well done!",
     langChip: "മലയാളം",
     sunAuto: "Live",
@@ -499,7 +581,7 @@ let riverMesh: THREE.Mesh;
 const FOG_DAY = new THREE.Color("#d8cdb4"), FOG_NIGHT = new THREE.Color("#1c2233");
 function applyThemeColors() {
   scene.fog = new THREE.Fog(FOG_DAY.clone().lerp(FOG_NIGHT, nightFactor).getHex(), 160, 650);
-  if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(cssVar("--grass"));
+  if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(IS_BAMBERG ? cssVar("--grass") : "#cfc4ac");
   if (riverMesh) (riverMesh.material as THREE.MeshStandardMaterial).color.set(cssVar("--regnitz"));
 }
 
@@ -697,7 +779,7 @@ updateSunFromRealTime();
 // ================= Ground, river, hills =================
 ground = new THREE.Mesh(
   new THREE.PlaneGeometry(HALF * 2.3, HALF * 2.3, 1, 1),
-  new THREE.MeshStandardMaterial({ color: cssVar("--grass"), map: createGrassTexture(), roughness: 1, metalness: 0 })
+  new THREE.MeshStandardMaterial({ color: IS_BAMBERG ? cssVar("--grass") : "#cfc4ac", map: createGrassTexture(), roughness: 1, metalness: 0 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
@@ -710,12 +792,17 @@ function addHill(def: typeof DOMBERG, color: string) {
   mesh.receiveShadow = true;
   scene.add(mesh);
 }
-addHill(DOMBERG, cssVar("--sandstone-deep"));
-addHill(MICHAELSBERG, "#5c7a45");
+if (IS_BAMBERG) {
+  addHill(DOMBERG, cssVar("--sandstone-deep"));
+  addHill(MICHAELSBERG, "#5c7a45");
+} else {
+  CITY.hills.forEach((hl) => addHill(hl, "#7d9a55"));
+}
 
 // Build a ribbon by offsetting the real Regnitz polyline perpendicular to
 // its own direction at each point -- a straightforward buffered-line
 // construction, not a fitted curve, but fine for a low-poly ribbon.
+if (MAP.river_polyline.length >= 2) {
 const riverLine = MAP.river_polyline;
 const riverShape = new THREE.Shape();
 const top: THREE.Vector2[] = [], bot: THREE.Vector2[] = [];
@@ -740,6 +827,7 @@ riverGeo.rotateX(-Math.PI / 2);
 riverMesh = new THREE.Mesh(riverGeo, new THREE.MeshStandardMaterial({ color: cssVar("--regnitz"), roughness: 0.12, metalness: 0.35 }));
 riverMesh.position.y = 0.12;
 scene.add(riverMesh);
+}
 
 // Real pedestrian/residential streets -- same buffered-line ribbon
 // technique as the river, just thinner and paved-colored, laid flush on
@@ -771,7 +859,7 @@ const roadTexture = createRoadTexture();
 const ROAD_TILE_SIZE = 1.6;
 roadTexture.repeat.set(1 / ROAD_TILE_SIZE, 1 / ROAD_TILE_SIZE);
 
-const roadColor = "#cbb99a";
+const roadColor = IS_BAMBERG ? "#cbb99a" : "#a19b90"; // big cities: grey cobbles against pale paving
 // Tracked so applyWeather() can shift every road toward a wet sheen (lower
 // roughness, a little metalness) during rain and back for clear/other
 // weather -- one array write covers every road regardless of count.
@@ -848,6 +936,7 @@ function house(x: number, z: number, w: number, h: number, d: number, wallColor:
   return g;
 }
 
+if (IS_BAMBERG) {
 (function buildRathaus() {
   const l = LANDMARKS[0]!;
   const footprint = MAP.landmarks.rathaus!.footprint!;
@@ -981,11 +1070,117 @@ function house(x: number, z: number, w: number, h: number, d: number, wallColor:
   g.position.set(center[0], terrainHeight(center[0], center[1]), center[1]);
   scene.add(g);
 })();
+} else {
+  buildCityLandmarks();
+}
 
 // ================= Decorative scatter: generic houses + trees =================
 // Real building footprints from the old town core (see bamberg-map-data.json)
 // stand in for the invented scatter this used to be -- same low-poly flat-
 // roofed treatment as everything else, but the actual street layout.
+// ---- Generic landmarks for the OpenStreetMap cities: the real outline, taller, with the feature that makes each
+// kind recognisable (spires, a clock tower, a castle keep, a paved square with a fountain, a stone bridge deck).
+function localOf(fp: Footprint): [number, number][] {
+  const cx = fp.reduce((a, p) => a + p[0]!, 0) / fp.length, cz = fp.reduce((a, p) => a + p[1]!, 0) / fp.length;
+  return fp.map(([x, z]) => [x! - cx, z! - cz] as [number, number]);
+}
+function spire(g: THREE.Group, x: number, z: number, h: number, w = 3.6) {
+  const t = box(w, h, w, cssVar("--sandstone-deep")); t.position.set(x, h / 2, z); t.castShadow = true; g.add(t);
+  const cap = pyramidRoof(w + 0.4, w + 0.4, w * 2.2, cssVar("--gold")); cap.position.set(x, h + w * 1.1, z); g.add(cap);
+}
+function fountainGroup(r: number): THREE.Group {
+  const g = new THREE.Group();
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, 1.1, 16), new THREE.MeshStandardMaterial({ color: cssVar("--sandstone-deep"), roughness: 0.8 }));
+  basin.position.y = 0.55; basin.castShadow = true; g.add(basin);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.88, r * 0.88, 0.1, 16), new THREE.MeshStandardMaterial({ color: cssVar("--regnitz"), roughness: 0.1, metalness: 0.3 }));
+  water.position.y = 1.05; g.add(water);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 4, 8), new THREE.MeshStandardMaterial({ color: cssVar("--gold"), metalness: 0.6, roughness: 0.35 }));
+  pole.position.y = 3; pole.castShadow = true; g.add(pole);
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.8, 12, 10), new THREE.MeshStandardMaterial({ color: cssVar("--gold-bright"), metalness: 0.6, roughness: 0.3 }));
+  orb.position.y = 5.3; g.add(orb);
+  return g;
+}
+function plaza(fp: Footprint | undefined, r = 12): THREE.Mesh {
+  const shape = fp && fp.length >= 3 ? footprintShape(localOf(fp)) : new THREE.Shape(new THREE.Path().absarc(0, 0, r, 0, Math.PI * 2, false).getPoints(24));
+  const m = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.18, bevelEnabled: false }),
+    new THREE.MeshStandardMaterial({ color: "#d3c7ad", roughness: 0.95 }));
+  m.rotateX(-Math.PI / 2); m.receiveShadow = true;
+  return m;
+}
+function buildCityLandmarks() {
+  for (const l of LANDMARKS) {
+    const fp = MAP.landmarks[l.id]?.footprint as Footprint | undefined;
+    const kind = l.kind || "building";
+    let g: THREE.Group;
+    if (kind === "square") {
+      g = new THREE.Group(); g.add(plaza(fp, 14));
+      const f = fountainGroup(2.4); g.add(f);
+    } else if (kind === "fountain") {
+      g = new THREE.Group(); g.add(plaza(undefined, 7)); g.add(fountainGroup(3.4));
+    } else if (kind === "bridge" && fp) {
+      g = new THREE.Group();
+      const deck = new THREE.Mesh(new THREE.ExtrudeGeometry(footprintShape(localOf(fp)), { depth: 0.45, bevelEnabled: false }),
+        new THREE.MeshStandardMaterial({ color: cssVar("--sandstone"), roughness: 0.9, flatShading: true }));
+      deck.rotateX(-Math.PI / 2); deck.position.y = 0.05; deck.castShadow = true; deck.receiveShadow = true; g.add(deck);
+      // statues along the bridge, on its long axis
+      const loc = localOf(fp);
+      let far = loc[0]!, fd = 0;
+      for (const p of loc) { const d = Math.hypot(p[0], p[1]); if (d > fd) { fd = d; far = p; } }
+      const ux = far[0] / (fd || 1), uz = far[1] / (fd || 1);
+      for (let t = -fd * 0.85; t <= fd * 0.85; t += 14) {
+        for (const side of [-1, 1]) {
+          const st = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 2.6, 6), new THREE.MeshStandardMaterial({ color: "#bfb39c", roughness: 0.9 }));
+          st.position.set(ux * t - uz * side * 2.2, 1.8, uz * t + ux * side * 2.2); st.castShadow = true; g.add(st);
+        }
+      }
+    } else if (!fp) { // a point only (castle node, small building): a keep with corner towers
+      g = new THREE.Group();
+      const keep = box(16, 12, 12, cssVar("--sandstone")); keep.position.y = 6; keep.castShadow = true; g.add(keep);
+      const roof = pyramidRoof(16, 12, 5, cssVar("--roof")); roof.position.y = 12 + 2.5; g.add(roof);
+      for (const [ox, oz] of [[-8, -6], [8, -6], [-8, 6], [8, 6]] as const) spire(g, ox, oz, 15, 3.2);
+    } else {
+      const height = kind === "church" || kind === "church2" ? 14 : kind === "palace" ? 12 : kind === "townhall" ? 12 : kind === "tower" ? 10 : 9;
+      const wall = kind === "palace" ? "#f1e2c2" : kind === "church" || kind === "church2" ? cssVar("--sandstone") : cssVar("--facade-cream");
+      g = buildingFromFootprint(fp, height, wall, cssVar("--roof"), kind === "church" || kind === "church2" ? "flat" : "hip");
+      const loc = localOf(fp);
+      let far = loc[0]!, fd = 0;
+      for (const p of loc) { const d = Math.hypot(p[0], p[1]); if (d > fd) { fd = d; far = p; } }
+      const ux = far[0] / (fd || 1), uz = far[1] / (fd || 1);
+      if (kind === "church") spire(g, ux * fd * 0.5, uz * fd * 0.5, height + 16);
+      if (kind === "church2") { for (const side of [-1, 1]) spire(g, ux * fd * 0.5 - uz * side * 3.2, uz * fd * 0.5 + ux * side * 3.2, height + 18, 3.4); }
+      if (kind === "townhall" || kind === "tower") spire(g, 0, 0, height + (kind === "tower" ? 14 : 10), 4);
+    }
+    g.position.set(l.x, terrainHeight(l.x, l.z), l.z);
+    scene.add(g);
+    l.mesh = g;
+  }
+}
+
+const occluders: THREE.Object3D[] = []; // every building group, for the see-through check
+let fadedNow = new Set<THREE.Object3D>();
+LANDMARKS.forEach((l) => { if (l.mesh) occluders.push(l.mesh); });
+function setFade(g: THREE.Object3D, faded: boolean) {
+  g.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+    if (!m || Array.isArray(m)) return;
+    m.transparent = faded; m.opacity = faded ? 0.28 : 1; m.depthWrite = !faded; m.needsUpdate = true;
+  });
+}
+const occRay = new THREE.Raycaster();
+function updateOcclusion(from: THREE.Vector3, to: THREE.Vector3) {
+  const dir = to.clone().sub(from); const dist = dir.length(); dir.normalize();
+  occRay.set(from, dir); occRay.far = dist;
+  const hits = new Set<THREE.Object3D>();
+  for (const h of occRay.intersectObjects(occluders, true)) {
+    let o: THREE.Object3D | null = h.object;
+    while (o && occluders.indexOf(o) === -1) o = o.parent;
+    if (o) hits.add(o);
+  }
+  fadedNow.forEach((g) => { if (!hits.has(g)) setFade(g, false); });
+  hits.forEach((g) => { if (!fadedNow.has(g)) setFade(g, true); });
+  fadedNow = hits;
+}
+
 function scatterHouses() {
   // Real German old towns are painted, not brown-on-brown -- the classic
   // Fachwerk mix of ochre, rose, sky-blue and cream facades, cycled against
@@ -1006,6 +1201,7 @@ function scatterHouses() {
     const g = buildingFromFootprint(footprint, height, wall, roof, "hip");
     g.position.set(cx, terrainHeight(cx, cz), cz);
     scene.add(g);
+    occluders.push(g);
   });
 }
 scatterHouses();
@@ -1017,15 +1213,25 @@ const treePlacements: { x: number; z: number; scale: number }[] = [];
 function addTree(x: number, z: number, scale = 1) {
   treePlacements.push({ x, z, scale });
 }
-for (let t = 0; t < 55; t++) {
+const TREE_BLOCKERS: Footprint[] = IS_BAMBERG ? [] : [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
+function treeBlocked(x: number, z: number): boolean {
+  if (IS_BAMBERG) return false;
+  for (const f of TREE_BLOCKERS) {
+    const p0 = f[0]!;
+    if (Math.abs(p0[0]! - x) > 40 || Math.abs(p0[1]! - z) > 40) continue;
+    if (pointInPoly(x, z, f) || pointInPoly(x + 1.5, z, f) || pointInPoly(x - 1.5, z, f)) return true;
+  }
+  return false;
+}
+for (let t = 0; t < (CITY_HILLS.length ? 55 : 0); t++) {
   const ang = Math.random() * Math.PI * 2;
-  const pick = Math.random() < 0.55 ? DOMBERG : MICHAELSBERG;
+  const pick = CITY_HILLS[Math.floor(Math.random() * CITY_HILLS.length)]!;
   const rad = pick.r * (0.3 + Math.random() * 0.75);
   const tx = pick.cx + Math.cos(ang) * rad, tz = pick.cz + Math.sin(ang) * rad;
-  if (distToRiver(tx, tz) < RIVER_HALF_W + 4) continue;
+  if (distToRiver(tx, tz) < RIVER_HALF_W + 4 || treeBlocked(tx, tz)) continue;
   addTree(tx, tz);
 }
-for (let t2 = 0; t2 < 14; t2++) {
+for (let t2 = 0; t2 < (IS_BAMBERG ? 14 : 0); t2++) {
   const tx2 = (Math.random() - 0.5) * HALF * 1.6, tz2 = (Math.random() - 0.5) * HALF * 1.6;
   if (distToRiver(tx2, tz2) < RIVER_HALF_W + 6) continue;
   addTree(tx2, tz2);
@@ -1049,7 +1255,8 @@ MAP.roads.forEach((road) => {
       const side = Math.random() < 0.5 ? 1 : -1;
       const offset = road.width / 2 + 2.2;
       const fx = mx + perpX * offset * side, fz = mz + perpZ * offset * side;
-      if (distToRiver(fx, fz) < RIVER_HALF_W + 3) continue;
+      if (distToRiver(fx, fz) < RIVER_HALF_W + 3 || treeBlocked(fx, fz)) continue;
+      if (!IS_BAMBERG && (road.width < 3 || Math.random() < 0.5)) continue; // big cities: fewer street trees, main streets only
       addTree(fx, fz, 0.85 + Math.random() * 0.3);
     }
   }
@@ -1265,13 +1472,15 @@ physicsWorld.addBody(heightfieldBody);
 // decoration-only -- real colliders for all of them isn't worth it for a
 // casual arcade kart.
 LANDMARKS.forEach((l) => {
+  if (l.kind === "square" || l.kind === "fountain" || l.kind === "bridge") return; // open places: drive through
   const box = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
   box.addShape(new CANNON.Box(new CANNON.Vec3(9, 6, 9)));
   box.position.set(l.x, 6, l.z);
   physicsWorld.addBody(box);
 });
 
-const KART_SPAWN = { x: 15, z: 21 }; // parked a few steps from the player's own spawn (10, 16)
+const PLAYER_SPAWN = IS_BAMBERG ? { x: 10, z: 16 } : freeSpot(8, 8);
+const KART_SPAWN = IS_BAMBERG ? { x: 15, z: 21 } : freeSpot(PLAYER_SPAWN.x + 6, PLAYER_SPAWN.z + 6); // parked a few steps from the player
 // Dimensions measured directly from the Kenney kart-oobi glTF's own accessor
 // bounds (see the offline Python bounding-box extraction used while
 // integrating it), not eyeballed -- the physics collider matches the real
@@ -1571,7 +1780,7 @@ function walkBy(mx: number, mz: number): boolean {
 // ---- Guide: which uncollected landmark is nearest, and which way it is from where the camera looks.
 function updateGuide() {
   const el = document.getElementById("guideHud")!;
-  const left = LANDMARKS.filter((l) => state.collected.indexOf(l.id) === -1);
+  const left = LANDMARKS.filter((l) => !isCollected(l));
   if (!joined || !left.length) { el.style.display = "none"; return; }
   const px = driving ? kartGroup.position.x : player.x, pz = driving ? kartGroup.position.z : player.z;
   let best = left[0]!, bd = Infinity;
@@ -1586,7 +1795,7 @@ function updateGuide() {
   el.style.display = "flex";
 }
 
-const player = { x: 10, z: 16, rotY: 0, mesh: null as THREE.Group | null, rig: null as AvatarRig | null, walkAmount: 0, speedEase: 0, speed: 26 }; // just outside the Rathaus's own footprint
+const player = { x: PLAYER_SPAWN.x, z: PLAYER_SPAWN.z, rotY: 0, mesh: null as THREE.Group | null, rig: null as AvatarRig | null, walkAmount: 0, speedEase: 0, speed: 26 }; // just outside the Rathaus's own footprint
 
 // ================= Player identity =================
 const PLAYER_KEY = "littleBamberg.playerId";
@@ -1676,7 +1885,10 @@ function connectWs() {
   ws.onmessage = (ev) => {
     let msg: any;
     try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg.type === "presence") {
+    if (msg.type === "presence" && (msg.city || "bamberg") !== CITY_ID) {
+      const pid = msg.id as string; // they're in another city: drop them from this one if they were here
+      if (peers[pid]) { scene.remove(peers[pid]!.mesh); peers[pid]!.nameEl.remove(); delete peers[pid]; }
+    } else if (msg.type === "presence") {
       const pid = msg.id as string;
       if (!peers[pid]) {
         const rig = makeAvatar(variantForId(pid));
@@ -1704,7 +1916,7 @@ let lastPresenceSent = 0;
 function sendPresence(t: number) {
   if (!ws || ws.readyState !== WebSocket.OPEN || t - lastPresenceSent < 110) return;
   lastPresenceSent = t;
-  ws.send(JSON.stringify({ type: "presence", x: player.x, z: player.z, rotY: player.rotY, name: state.name }));
+  ws.send(JSON.stringify({ type: "presence", x: player.x, z: player.z, rotY: player.rotY, name: state.name, city: CITY_ID }));
 }
 
 // ================= Join flow =================
@@ -1760,7 +1972,13 @@ function applyLanguage() {
   nameInput.placeholder = tr("namePlaceholder");
   joinBtn.textContent = joinBtn.disabled ? tr("joining") : tr("joinCta");
   document.getElementById("txtFootnote")!.textContent = tr("footnote");
-  document.getElementById("txtScoreLabel")!.textContent = tr("scoreLabel");
+  document.getElementById("txtScoreLabel")!.textContent = lang === "ml" ? CITY.name_ml : CITY.name_en;
+  document.getElementById("travelToggle")!.textContent = tr("travel");
+  document.getElementById("travelToggleHero")!.textContent = "📍 " + (lang === "ml" ? CITY.name_ml : CITY.name_en) + " · " + tr("travel");
+  document.getElementById("travelTitle")!.textContent = tr("travelTitle");
+  document.getElementById("travelNote")!.textContent = tr("travelNote");
+  document.getElementById("travelClose")!.textContent = tr("travelClose");
+  if (!document.getElementById("travel")!.hidden) renderTravel();
   document.getElementById("boardToggle")!.textContent = tr("boardToggle");
   document.getElementById("txtBoardTitle")!.textContent = tr("boardTitle");
   document.getElementById("boardEmpty")!.textContent = tr("boardEmpty");
@@ -1778,6 +1996,61 @@ function toggleLanguage() {
   try { localStorage.setItem("littleBamberg.lang", lang); } catch (e) {}
   applyLanguage();
 }
+// ================= Travel: a map of Bavaria with every city =================
+function cityProgress(c: CityMeta): { got: number; of: number } {
+  const ids = c.id === "bamberg" ? ["rathaus", "dom", "venedig", "schlenkerla", "rosengarten", "concordia", "maxplatz"] : c.landmarks.map((l) => c.id + ":" + l.id);
+  return { got: ids.filter((k) => state.collected.indexOf(k) !== -1).length, of: ids.length };
+}
+function renderTravel() {
+  const svg = document.getElementById("travelMap")!;
+  const outline = bavariaOutline as number[][];
+  const lats = outline.map((p) => p[0]!), lons = outline.map((p) => p[1]!);
+  const k = Math.cos(49 * Math.PI / 180);
+  const minX = Math.min(...lons) * k, maxX = Math.max(...lons) * k, minY = Math.min(...lats), maxY = Math.max(...lats);
+  const W = 640, H = 520, pad = 18;
+  const sc = Math.min((W - 2 * pad) / (maxX - minX), (H - 2 * pad) / (maxY - minY));
+  const px = (lat: number, lon: number) => [pad + (lon * k - minX) * sc, pad + (maxY - lat) * sc];
+  const path = outline.map((p, i) => { const [x, y] = px(p[0]!, p[1]!); return (i ? "L" : "M") + x!.toFixed(1) + "," + y!.toFixed(1); }).join("") + "Z";
+  const pts = ALL_CITIES.map((c) => ({ c, xy: px(c.latlon[0]!, c.latlon[1]!) }));
+  const order = ["wuerzburg", "bamberg", "erlangen", "nuernberg", "regensburg", "muenchen", "augsburg"]; // a rail loop
+  const rail = order.map((id, i) => { const p = pts.find((q) => q.c.id === id)!.xy; return (i ? "L" : "M") + p[0]!.toFixed(1) + "," + p[1]!.toFixed(1); }).join("");
+  const name = (c: CityMeta) => (lang === "ml" ? c.name_ml : c.name_en);
+  svg.innerHTML = `<path class="land" d="${path}"/><path class="rail" d="${rail}"/>` + pts.map(({ c, xy }) => {
+    const p = cityProgress(c), here = c.id === CITY_ID;
+    // close neighbours (Würzburg/Bamberg, Erlangen/Nürnberg) put their labels on opposite sides
+    const right = ({ wuerzburg: false, nuernberg: false, augsburg: false } as Record<string, boolean>)[c.id] ?? xy[0]! < W - 150;
+    const dy = ({ nuernberg: 14, erlangen: -8, bamberg: -8, wuerzburg: 10 } as Record<string, number>)[c.id] ?? 0;
+    return `<g class="city${here ? " here" : ""}" data-city="${c.id}" tabindex="0" role="button" aria-label="${name(c)}">
+      <circle cx="${xy[0]}" cy="${xy[1]}" r="8"/>
+      <text x="${xy[0]! + (right ? 14 : -14)}" y="${xy[1]! - 2 + dy}" text-anchor="${right ? "start" : "end"}">${name(c)}</text>
+      <text class="sub" x="${xy[0]! + (right ? 14 : -14)}" y="${xy[1]! + 14 + dy}" text-anchor="${right ? "start" : "end"}">${here ? tr("travelHere") + " · " : ""}${p.got}/${p.of}</text></g>`;
+  }).join("");
+  document.getElementById("travelList")!.innerHTML = ALL_CITIES.map((c) => {
+    const p = cityProgress(c);
+    return `<button class="chip" data-city="${c.id}" type="button"${c.id === CITY_ID ? ' aria-current="true"' : ""}>${name(c)} · ${p.got}/${p.of}</button>`;
+  }).join("");
+}
+function goToCity(id: string) {
+  if (id === CITY_ID) { document.getElementById("travel")!.hidden = true; return; }
+  try { localStorage.setItem("littleBamberg.city", id); } catch (e) {}
+  document.getElementById("travelNote")!.textContent = tr("travelling");
+  location.search = "?city=" + encodeURIComponent(id);
+}
+function openTravel() { renderTravel(); document.getElementById("travel")!.hidden = false; }
+document.getElementById("travelToggle")!.addEventListener("click", openTravel);
+document.getElementById("travelToggleHero")!.addEventListener("click", openTravel);
+document.getElementById("travelClose")!.addEventListener("click", () => { document.getElementById("travel")!.hidden = true; });
+document.getElementById("travel")!.addEventListener("click", (e) => {
+  const t = (e.target as Element).closest("[data-city]");
+  if (t) goToCity(t.getAttribute("data-city")!);
+  else if (e.target === e.currentTarget) document.getElementById("travel")!.hidden = true;
+});
+document.getElementById("travel")!.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.getElementById("travel")!.hidden = true;
+  const t = (e.target as Element).closest?.("[data-city]");
+  if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); goToCity(t.getAttribute("data-city")!); }
+});
+
 document.getElementById("langToggle")!.addEventListener("click", toggleLanguage);
 document.getElementById("langToggleGame")!.addEventListener("click", toggleLanguage);
 
@@ -1862,7 +2135,8 @@ function applyWeather() {
 }
 
 function updateScoreHud() {
-  document.getElementById("scoreValue")!.textContent = String(state.score);
+  // this city's points out of its total; the leaderboard shows the all-cities total
+  document.getElementById("scoreValue")!.textContent = String(cityScore());
   document.getElementById("scoreTotal")!.textContent = " / " + TOTAL_POSSIBLE;
 }
 function showHint() {
@@ -1969,20 +2243,20 @@ const collectingLock: Record<string, boolean> = {};
 function checkCollisions() {
   if (!joined) return;
   LANDMARKS.forEach((l) => {
-    if (state.collected.indexOf(l.id) !== -1) return;
+    if (isCollected(l)) return;
     if (collectingLock[l.id]) return;
     const d = Math.hypot(player.x - l.x, player.z - l.z);
     if (d < 13) { collectingLock[l.id] = true; collect(l); }
   });
 }
 function collect(landmark: Landmark) {
-  state.collected.push(landmark.id);
+  state.collected.push(lmKey(landmark));
   state.score += landmark.points;
   updateScoreHud();
   const text = tl(landmark);
   showToast({ label: text.label, flavor: text.flavor, points: landmark.points });
   persistProgress();
-  if (state.collected.length === LANDMARKS.length) {
+  if (LANDMARKS.every(isCollected)) {
     setTimeout(() => {
       showToast({ label: tr("completeLabel"), flavor: tr("completeFlavor"), points: 0 });
     }, 2600);
@@ -2031,7 +2305,8 @@ const camTarget = new THREE.Vector3(0, 4, 0);
 // Orbit control: drag rotates/tilts the camera around the player; it holds
 // that angle on its own (doesn't snap back to "behind") while the target
 // keeps following the player every frame regardless of dragging.
-let camYaw = 0, camPitch = 0.62, camDist = 30;
+let occFrame = 0;
+let camYaw = 0, camPitch = IS_BAMBERG ? 0.62 : 0.86, camDist = IS_BAMBERG ? 30 : 34;
 // Karting gets its own chase-camera state -- closer, lower, and yaw-locked
 // behind the vehicle's heading by default (kartLookYaw is only a temporary
 // look-around offset from dragging, and springs back to 0 on release),
@@ -2284,6 +2559,7 @@ function loop(t: number) {
   camera.lookAt(camTarget);
   followShadow(camTarget.x, camTarget.z);
   updateGuide();
+  if ((occFrame = (occFrame + 1) % 2) === 0) updateOcclusion(camTarget, camPos);
 
   Object.keys(peers).forEach((pid) => {
     const p = peers[pid]!;
@@ -2311,7 +2587,7 @@ function loop(t: number) {
 
   LANDMARKS.forEach((l, idx) => {
     const el = landmarkLabels[idx]!;
-    const got = state.collected.indexOf(l.id) !== -1;
+    const got = isCollected(l);
     el.className = "label3d" + (got ? " got" : "");
     if (l.mesh) {
       const box3 = new THREE.Box3().setFromObject(l.mesh);
