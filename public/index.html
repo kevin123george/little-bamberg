@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ml">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ലിറ്റിൽ ബാംബെർഗ്</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Malayalam:wght@500;600;700&family=Noto+Sans+Malayalam:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --sandstone: #e3c9a0;
+    --sandstone-deep: #cba876;
+    --regnitz: #2f6f72;
+    --regnitz-deep: #1f4c4e;
+    --roof: #b1543f;
+    --timber: #3c2a1e;
+    --grass: #7f9a52;
+    --grass-deep: #64803e;
+    --facade-yellow: #e8c468;
+    --facade-pink: #dd97a0;
+    --facade-blue: #9bb8c9;
+    --facade-cream: #f2e6c9;
+    --facade-teal: #7fa896;
+    --parchment: #f6ede0;
+    --ink: #2a231c;
+    --ink-soft: #5a4c3c;
+    --gold: #c08a2e;
+    --gold-bright: #dba53f;
+    --surface: #fffaf2;
+    --surface-2: #efe1cb;
+    --border: rgba(60, 42, 30, 0.16);
+    --shadow: rgba(42, 35, 28, 0.22);
+    --good: #3f7a4e;
+    --sky-top: #bfe0e8;
+    --sky-bottom: #eadfc4;
+    --fog: #d9c9a8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --sandstone: #6b563a; --sandstone-deep: #4a3a26; --regnitz: #3f9195; --regnitz-deep: #14282a;
+      --roof: #c96a52; --timber: #efe0cf; --grass: #4a5c34; --grass-deep: #384728;
+      --facade-yellow: #b89448; --facade-pink: #a4636b; --facade-blue: #5f7c8c; --facade-cream: #cabb8f; --facade-teal: #4d7060;
+      --parchment: #1c1712; --ink: #f3e9da; --ink-soft: #cbb99e;
+      --gold: #dba53f; --gold-bright: #f0bf5f; --surface: #262019; --surface-2: #332a20;
+      --border: rgba(243, 233, 218, 0.14); --shadow: rgba(0, 0, 0, 0.5); --good: #6fbf7f;
+      --sky-top: #101a22; --sky-bottom: #2c241a; --fog: #1b1712;
+    }
+  }
+  :root[data-theme="dark"] {
+    --sandstone: #6b563a; --sandstone-deep: #4a3a26; --regnitz: #3f9195; --regnitz-deep: #14282a;
+    --roof: #c96a52; --timber: #efe0cf; --grass: #4a5c34; --grass-deep: #384728;
+    --facade-yellow: #b89448; --facade-pink: #a4636b; --facade-blue: #5f7c8c; --facade-cream: #cabb8f; --facade-teal: #4d7060;
+    --parchment: #1c1712; --ink: #f3e9da; --ink-soft: #cbb99e;
+    --gold: #dba53f; --gold-bright: #f0bf5f; --surface: #262019; --surface-2: #332a20;
+    --border: rgba(243, 233, 218, 0.14); --shadow: rgba(0, 0, 0, 0.5); --good: #6fbf7f;
+    --sky-top: #101a22; --sky-bottom: #2c241a; --fog: #1b1712;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--parchment); color: var(--ink);
+    font-family: "Noto Sans Malayalam", "Noto Sans", sans-serif;
+  }
+  h1, h2, .display { font-family: "Noto Serif Malayalam", serif; font-weight: 700; text-wrap: balance; }
+  button, input { font-family: inherit; }
+  #stage { position: relative; width: 100%; height: 100%; overflow: hidden; }
+  #world { position: absolute; inset: 0; }
+  #world canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .label3d {
+    position: absolute; transform: translate(-50%, -100%);
+    font-size: 12.5px; font-weight: 600; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 9px; white-space: nowrap; box-shadow: 0 2px 8px var(--shadow);
+  }
+  .label3d.player { background: var(--timber); color: var(--parchment); border-color: transparent; font-weight: 700; }
+  .label3d.me { background: var(--gold); color: #2a1c08; }
+  .label3d.got { opacity: 0.45; }
+  #hero-copy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; pointer-events: none; }
+  #hero-copy .card { pointer-events: auto; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+    box-shadow: 0 18px 50px var(--shadow); padding: 34px 36px 30px; width: 100%; max-width: 400px;
+  }
+  .eyebrow { font-size: 13px; font-weight: 600; color: var(--regnitz); letter-spacing: 0.02em; margin: 0 0 10px; }
+  .card h1 { font-size: 30px; line-height: 1.15; margin: 0 0 8px; color: var(--ink); }
+  .tagline { font-size: 15px; color: var(--ink-soft); margin: 0 0 22px; line-height: 1.5; }
+  label { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); margin: 0 0 6px; }
+  #nameInput {
+    width: 100%; font-size: 16px; padding: 11px 13px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); margin-bottom: 18px;
+  }
+  #nameInput:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+  .cta {
+    width: 100%; border: none; border-radius: 10px; background: var(--gold); color: #2a1c08;
+    font-weight: 700; font-size: 16px; padding: 13px 16px; cursor: pointer;
+    transition: background 120ms ease, transform 120ms ease;
+  }
+  .cta:hover { background: var(--gold-bright); }
+  .cta:active { transform: translateY(1px); }
+  .cta:focus-visible { outline: 2px solid var(--regnitz); outline-offset: 2px; }
+  .cta:disabled { opacity: 0.55; cursor: default; }
+  .footnote { font-size: 12.5px; color: var(--ink-soft); text-align: center; margin: 14px 0 0; }
+  .hud {
+    position: absolute; display: flex; align-items: center; gap: 10px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 20px var(--shadow); padding: 10px 14px;
+  }
+  #scoreHud { top: 16px; left: 16px; font-variant-numeric: tabular-nums; display: none; }
+  #scoreHud .label { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; }
+  #scoreHud .value { font-family: "Noto Serif Malayalam", serif; font-size: 20px; font-weight: 700; color: var(--regnitz); }
+  #scoreTotal { font-family: "Noto Sans Malayalam", sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+  #topRightHud { position: absolute; top: 16px; right: 16px; display: none; gap: 10px; }
+  .hudBtn {
+    display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 6px 20px var(--shadow); padding: 10px 14px;
+    cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap;
+  }
+  .hudBtn:hover { background: var(--surface-2); }
+  #board {
+    position: absolute; top: 66px; right: 16px; width: 240px; max-height: 60%; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 10px 30px var(--shadow); padding: 14px; display: none;
+  }
+  .topRow { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .chip {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 12px; font-size: 12px; font-weight: 700; color: var(--ink); cursor: pointer;
+  }
+  .chip:hover { background: var(--surface); }
+  #board h2 { font-size: 14px; margin: 0 0 10px; color: var(--ink); }
+  #boardList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  #boardList li { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; padding: 5px 7px; border-radius: 7px; }
+  #boardList li.me { background: var(--surface-2); font-weight: 700; }
+  #boardList .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #boardList .pts { color: var(--regnitz); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  #boardEmpty { font-size: 12.5px; color: var(--ink-soft); }
+  #hint {
+    position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px;
+    font-size: 13px; box-shadow: 0 6px 20px var(--shadow); opacity: 0; transition: opacity 400ms ease;
+    pointer-events: none; white-space: nowrap;
+  }
+  #hint.show { opacity: 1; }
+  #carPrompt {
+    position: absolute; bottom: 54px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px;
+    font-size: 13px; box-shadow: 0 6px 20px var(--shadow); opacity: 0; transition: opacity 200ms ease;
+    pointer-events: none; white-space: nowrap; font-weight: 700; color: var(--gold-bright, var(--ink));
+  }
+  #carPrompt.show { opacity: 1; }
+  #toast {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%) translateY(-12px);
+    background: var(--timber); color: var(--parchment); border-radius: 12px; padding: 12px 18px;
+    box-shadow: 0 10px 30px var(--shadow); font-size: 14px; max-width: 320px; text-align: center;
+    opacity: 0; transition: opacity 220ms ease, transform 220ms ease; pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast .pts { color: var(--gold-bright); font-weight: 700; }
+  #joystick {
+    position: absolute; bottom: 26px; left: 26px; width: 120px; height: 120px;
+    display: none; touch-action: none;
+  }
+  #joystick.game-active { display: block; }
+  #joystickBase {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: var(--surface); border: 1px solid var(--border); box-shadow: 0 6px 20px var(--shadow);
+    opacity: 0.85;
+  }
+  #joystickKnob {
+    position: absolute; width: 52px; height: 52px; border-radius: 50%;
+    left: 34px; top: 34px; background: var(--gold); box-shadow: 0 4px 12px var(--shadow);
+    transition: transform 80ms ease;
+  }
+  #joystick.dragging #joystickKnob { transition: none; }
+  #cameraHint {
+    position: absolute; bottom: 44px; right: 26px; display: none;
+    font-size: 11.5px; color: var(--ink-soft); background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 5px 11px; box-shadow: 0 4px 14px var(--shadow); opacity: 0.85;
+  }
+  #cameraHint.game-active { display: block; }
+  @media (hover: hover) and (pointer: fine) {
+    /* desktop: no on-screen joystick, WASD + click-to-move instead */
+    #joystick { display: none !important; }
+  }
+  #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--parchment); z-index: 5; font-size: 14px; color: var(--ink-soft); }
+  #loading.hide { display: none; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  @media (max-width: 480px) {
+    .card { padding: 26px 22px 22px; }
+    .card h1 { font-size: 25px; }
+    #board { width: min(78vw, 260px); }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="loading">ബാംബെർഗ് ഉണ്ടാക്കുന്നു…</div>
+  <div id="world"></div>
+  <div id="labels"></div>
+
+  <div id="hero-copy">
+    <div class="card">
+      <div class="topRow">
+        <button class="chip" id="langToggle" type="button"></button>
+      </div>
+      <p class="eyebrow" id="txtEyebrow"></p>
+      <h1 id="txtTitle"></h1>
+      <p class="tagline" id="txtTagline"></p>
+      <label for="nameInput" id="txtNameLabel"></label>
+      <input id="nameInput" type="text" maxlength="18" autocomplete="off" />
+      <button class="cta" id="joinBtn"></button>
+      <p class="footnote" id="txtFootnote"></p>
+    </div>
+  </div>
+
+  <div class="hud" id="scoreHud">
+    <span class="label" id="txtScoreLabel"></span>
+    <span class="value"><span id="scoreValue">0</span><span id="scoreTotal"></span></span>
+  </div>
+  <div id="topRightHud">
+    <button class="hudBtn" id="langToggleGame"></button>
+    <button class="hudBtn" id="dayNightToggle"></button>
+    <button class="hudBtn" id="weatherToggle"></button>
+    <button class="hudBtn" id="boardToggle"></button>
+  </div>
+  <div id="board">
+    <h2 id="txtBoardTitle"></h2>
+    <p id="boardEmpty"></p>
+    <ul id="boardList"></ul>
+  </div>
+  <div id="hint">നീങ്ങാൻ അമ്പടയാളങ്ങൾ ഉപയോഗിക്കൂ, ക്ലിക്ക് ചെയ്ത് നടക്കൂ</div>
+  <div id="toast"></div>
+  <div id="carPrompt"></div>
+  <div id="cameraHint">ക്യാമറ തിരിക്കാൻ വലിക്കൂ</div>
+  <div id="joystick" aria-hidden="true">
+    <div id="joystickBase"></div>
+    <div id="joystickKnob"></div>
+  </div>
+</div>
+<script type="module" src="./game.ts"></script>
+</body>
+</html>

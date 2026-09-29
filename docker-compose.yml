@@ -1,0 +1,11 @@
+services:
+  little-bamberg:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${LAN_IP:?set LAN_IP in .env}:3300:3300"
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:

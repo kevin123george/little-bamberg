@@ -1,0 +1,20 @@
+{
+  "name": "little-bamberg",
+  "module": "server.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot server.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/three": "^0.186.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "cannon-es": "^0.20.0",
+    "three": "^0.186.0"
+  }
+}
