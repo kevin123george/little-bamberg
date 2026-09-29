@@ -1,0 +1,2 @@
+Vehicle models: Kenney "Starter Kit Racing" (https://github.com/KenneyNL/Starter-Kit-Racing), CC0 1.0 (public domain).
+Taken from the three.js port by mrdoob (https://github.com/mrdoob/Starter-Kit-Racing, MIT). Visual style (palette, lighting, trees, kerbs) also follows that port.

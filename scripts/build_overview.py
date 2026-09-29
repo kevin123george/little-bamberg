@@ -101,7 +101,10 @@ def main():
             scatter.append({"footprint": fp})
             placed += 1
 
-    roads = [{"line": [pts[a], pts[b]], "width": 4.2} for a, b in MOTORWAYS]
+    def dense(a, b, step=8):  # a point every 8 units, so the road can follow the hills
+        n = max(1, int(math.hypot(b[0] - a[0], b[1] - a[1]) / step))
+        return [[round(a[0] + (b[0] - a[0]) * i / n, 2), round(a[1] + (b[1] - a[1]) * i / n, 2)] for i in range(n + 1)]
+    roads = [{"line": dense(pts[a], pts[b]), "width": 4.2} for a, b in MOTORWAYS]
 
     meta = {
         "id": "bayern", "name_en": "Bavaria", "name_ml": "ബവേറിയ", "latlon": [LAT0, LON0], "overview": True,

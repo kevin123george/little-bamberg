@@ -6,6 +6,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import bambergData from "./bamberg-map-data.json";
 import muenchenData from "./maps/muenchen.json";
 import nuernbergData from "./maps/nuernberg.json";
@@ -53,14 +54,16 @@ const ALL_CITIES: CityMeta[] = Object.keys(CITY_MAPS).map((k) => CITY_MAPS[k].me
 // avatar meshes are built, further down this file.
 const gltfLoader = new GLTFLoader();
 const CHARACTER_VARIANTS = ["a", "b", "c", "d", "e", "f"];
-const kartGltfPromise = gltfLoader.loadAsync("./models/kart/kart-oobi.glb");
+// Kenney "Starter Kit Racing" truck (CC0, via mrdoob's three.js port) -- see models/truck/LICENSE
+const kartGltfPromise = gltfLoader.loadAsync("./models/truck/vehicle-truck-yellow.glb");
+const TRUCK_SCALE = 0.62; // the model is 1.5 x 2.8 m; this makes it kart-sized next to the characters
 const characterGltfPromises = CHARACTER_VARIANTS.map((v) => gltfLoader.loadAsync(`./models/characters/character-${v}.glb`));
 
 // The 3D town keeps ONE palette whatever the page theme is (dark mode used to swap in muddy
 // grass, a dark river and cream "timber"); day vs night is the lighting's job, not the colours'.
 const WORLD_PALETTE: Record<string, string> = {
-  "--sandstone": "#e6cda6", "--sandstone-deep": "#cfae7e", "--regnitz": "#3d8a90", "--regnitz-deep": "#23585c",
-  "--roof": "#b8573f", "--timber": "#4a3526", "--grass": "#8aa75e", "--grass-deep": "#6f8c47",
+  "--sandstone": "#e6cda6", "--sandstone-deep": "#cfae7e", "--regnitz": "#3a7fa6", "--regnitz-deep": "#23587a",
+  "--roof": "#b8573f", "--timber": "#4a3526", "--grass": "#4f9a73", "--grass-deep": "#447f62",
   "--facade-yellow": "#ecc973", "--facade-pink": "#e3a3a9", "--facade-blue": "#a6c2d2", "--facade-cream": "#f4e9cf",
   "--facade-teal": "#8cb3a0", "--gold": "#c9922f", "--gold-bright": "#e2ae45", "--fog": "#d8cdb4",
 };
@@ -586,7 +589,7 @@ let hemi: THREE.HemisphereLight;
 let ground: THREE.Mesh;
 let riverMesh: THREE.Mesh | undefined;
 
-const FOG_DAY = new THREE.Color("#d8cdb4"), FOG_NIGHT = new THREE.Color("#1c2233");
+const FOG_DAY = new THREE.Color("#c3cbd2"), FOG_NIGHT = new THREE.Color("#1c2233");
 function applyThemeColors() {
   scene.fog = new THREE.Fog(FOG_DAY.clone().lerp(FOG_NIGHT, nightFactor).getHex(), 160, 650);
   if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(IS_BAMBERG ? cssVar("--grass") : IS_OVERVIEW ? "#9ea58f" : "#cfc4ac");
@@ -622,20 +625,20 @@ let envTarget: THREE.WebGLRenderTarget | null = null;
 function updateEnvironment(dayFactor: number) {
   const next = pmrem.fromScene(envScene, 0.04);
   scene.environment = next.texture;
-  scene.environmentIntensity = 0.12 + 0.5 * dayFactor;
+  scene.environmentIntensity = 0.1 + 0.2 * dayFactor; // the hemisphere light carries the ambient now
   envTarget?.dispose();
   envTarget = next;
 }
 
-const HEMI_BASE_INTENSITY = 0.75, SUN_BASE_INTENSITY = 1.6;
+const HEMI_BASE_INTENSITY = 1.45, SUN_BASE_INTENSITY = 2.6; // bright, even, soft -- after mrdoob's Starter Kit Racing (hemi 2, sun 3)
 let nightFactor = 0; // 0 = full day, 1 = full night -- drives star/moon opacity and dims the ambient/sun together so the ground doesn't stay daylight-bright under a night sky
 
 const sunDir = new THREE.Vector3();
 const lightDir = new THREE.Vector3(0.3, 0.8, 0.2).normalize(); // where the shadow-casting light comes from (sun by day, moon by night)
 const MOON_LIGHT_DIR = new THREE.Vector3(-0.35, 0.85, 0.4).normalize();
-const SUN_COLOR_DAY = new THREE.Color(0xfff2d9), MOON_COLOR = new THREE.Color(0x9fb3ff);
-const HEMI_SKY_DAY = new THREE.Color(0xcfe6ee), HEMI_SKY_NIGHT = new THREE.Color(0x6f82b4);
-const HEMI_GROUND_DAY = new THREE.Color(0x7a6a4c), HEMI_GROUND_NIGHT = new THREE.Color(0x262833);
+const SUN_COLOR_DAY = new THREE.Color(0xffffff), MOON_COLOR = new THREE.Color(0x9fb3ff);
+const HEMI_SKY_DAY = new THREE.Color(0xc8d8e8), HEMI_SKY_NIGHT = new THREE.Color(0x6f82b4);
+const HEMI_GROUND_DAY = new THREE.Color(0x7a8a5a), HEMI_GROUND_NIGHT = new THREE.Color(0x262833);
 // theta is in this game's own ground-plane convention: the OSM projection
 // (see the top of this file) made real east -> +x and real north -> -z, so
 // theta=0 points -z (north) and increases toward +x (east) as it grows --
@@ -743,7 +746,7 @@ sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -95, right: 95, top: 95, bottom: -95, near: 10, far: 420 });
 sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.35;
-sun.shadow.radius = 2.5;
+sun.shadow.radius = 4;
 scene.add(sun);
 scene.add(sun.target);
 function followShadow(x: number, z: number) {
@@ -887,21 +890,21 @@ const roadTexture = createRoadTexture();
 const ROAD_TILE_SIZE = 1.6;
 roadTexture.repeat.set(1 / ROAD_TILE_SIZE, 1 / ROAD_TILE_SIZE);
 
-const roadColor = IS_BAMBERG ? "#cbb99a" : "#a19b90"; // big cities: grey cobbles against pale paving
+const roadColor = "#55565f"; // dark asphalt on a light kerb (the Starter Kit Racing look)
+const kerbMat = new THREE.MeshStandardMaterial({ color: "#e3e4ee", roughness: 0.8, metalness: 0 });
 // Tracked so applyWeather() can shift every road toward a wet sheen (lower
 // roughness, a little metalness) during rain and back for clear/other
 // weather -- one array write covers every road regardless of count.
 const roadMaterials: THREE.MeshStandardMaterial[] = [];
-MAP.roads.forEach((road) => {
-  const line = road.line;
-  if (line.length < 2) return;
-  const halfW = road.width / 2;
+// every street as a ribbon, asphalt over a slightly wider light kerb; all merged into two meshes (two draw calls instead
+// of one per street) and lifted onto the terrain
+function ribbon(line: Footprint, halfW: number, lift: number): THREE.BufferGeometry {
   const shape = new THREE.Shape();
   const rTop: THREE.Vector2[] = [], rBot: THREE.Vector2[] = [];
   for (let i = 0; i < line.length; i++) {
-    const [x, z] = line[i]!;
-    const [px, pz] = line[Math.max(0, i - 1)]!;
-    const [nx, nz] = line[Math.min(line.length - 1, i + 1)]!;
+    const [x, z] = line[i]! as [number, number];
+    const [px, pz] = line[Math.max(0, i - 1)]! as [number, number];
+    const [nx, nz] = line[Math.min(line.length - 1, i + 1)]! as [number, number];
     const dx = nx - px, dz = nz - pz;
     const len = Math.hypot(dx, dz) || 1;
     const perpX = -dz / len, perpZ = dx / len;
@@ -914,23 +917,27 @@ MAP.roads.forEach((road) => {
   shape.closePath();
   const geo = new THREE.ShapeGeometry(shape);
   geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) pos.setY(i, terrainHeight(pos.getX(i), pos.getZ(i)) + lift);
+  return geo;
+}
+const asphaltGeos: THREE.BufferGeometry[] = [], kerbGeos: THREE.BufferGeometry[] = [];
+MAP.roads.forEach((road) => {
+  if (road.line.length < 2) return;
+  kerbGeos.push(ribbon(road.line, road.width / 2 + 0.45, 0.06));
+  asphaltGeos.push(ribbon(road.line, road.width / 2, 0.09));
+});
+if (asphaltGeos.length) {
   const roadMat = new THREE.MeshStandardMaterial({ color: roadColor, map: roadTexture, roughness: 1, metalness: 0 });
   roadMaterials.push(roadMat);
-  const mesh = new THREE.Mesh(geo, roadMat);
-  // follow the terrain (roads climbing Domberg shouldn't float or clip) --
-  // lift each vertex to the ground height under it.
-  const pos = geo.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < pos.count; i++) {
-    const vx = pos.getX(i), vz = pos.getZ(i);
-    pos.setY(i, terrainHeight(vx, vz) + 0.08);
-  }
-  pos.needsUpdate = true;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-});
+  const asphalt = new THREE.Mesh(mergeGeometries(asphaltGeos)!, roadMat);
+  const kerbs = new THREE.Mesh(mergeGeometries(kerbGeos)!, kerbMat);
+  asphalt.receiveShadow = true; kerbs.receiveShadow = true;
+  scene.add(kerbs, asphalt);
+}
 
 // vineyard terrace stripes on Michaelsberg
-for (let vr = MICHAELSBERG.r * 0.25; vr < MICHAELSBERG.r * 0.85; vr += 7) {
+for (let vr = MICHAELSBERG.r * 0.25; IS_BAMBERG && vr < MICHAELSBERG.r * 0.85; vr += 7) {
   const stripGeo = new THREE.TorusGeometry(vr, 0.5, 4, 20, Math.PI * 1.1);
   const strip = new THREE.Mesh(stripGeo, new THREE.MeshStandardMaterial({ color: "#7a9a56", flatShading: true, metalness: 0 }));
   strip.rotation.x = Math.PI / 2;
@@ -1369,13 +1376,18 @@ MAP.roads.forEach((road) => {
 });
 
 const trunkMesh = new THREE.InstancedMesh(
-  new THREE.CylinderGeometry(0.35, 0.5, 2.4, 6),
-  new THREE.MeshStandardMaterial({ color: cssVar("--timber"), metalness: 0 }),
+  new THREE.CylinderGeometry(0.32, 0.45, 2.4, 6),
+  new THREE.MeshStandardMaterial({ color: "#955f41", roughness: 0.9, metalness: 0 }),
   treePlacements.length
 );
+const pineGeo = mergeGeometries([ // three stacked tiers, widest at the bottom (local origin = crown centre)
+  new THREE.ConeGeometry(1.9, 2.2, 7).translate(0, -0.9, 0),
+  new THREE.ConeGeometry(1.5, 1.9, 7).translate(0, 0.3, 0),
+  new THREE.ConeGeometry(1.05, 1.7, 7).translate(0, 1.35, 0),
+])!;
 const crownMesh = new THREE.InstancedMesh(
-  new THREE.ConeGeometry(1.8, 3.6, 7),
-  new THREE.MeshStandardMaterial({ color: "#5c7a45", flatShading: true, metalness: 0 }),
+  pineGeo,
+  new THREE.MeshStandardMaterial({ color: "#4a916d", flatShading: true, roughness: 0.85, metalness: 0 }),
   treePlacements.length
 );
 trunkMesh.castShadow = true;
@@ -1387,11 +1399,13 @@ treePlacements.forEach((p, i) => {
   const s = new THREE.Vector3(p.scale, p.scale, p.scale);
   treeMat4.compose(new THREE.Vector3(p.x, gy + 1.2 * p.scale, p.z), noRot, s);
   trunkMesh.setMatrixAt(i, treeMat4);
-  treeMat4.compose(new THREE.Vector3(p.x, gy + 3.8 * p.scale, p.z), noRot, s);
+  treeMat4.compose(new THREE.Vector3(p.x, gy + 3.8 * p.scale, p.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (i * 2.39996) % 6.283), s);
   crownMesh.setMatrixAt(i, treeMat4);
+  crownMesh.setColorAt(i, new THREE.Color(i % 3 === 0 ? "#427c59" : i % 3 === 1 ? "#4a916d" : "#56a37b"));
 });
 trunkMesh.instanceMatrix.needsUpdate = true;
 crownMesh.instanceMatrix.needsUpdate = true;
+if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
 scene.add(trunkMesh, crownMesh);
 
 // ================= Street lamps =================
@@ -1596,8 +1610,10 @@ const KART_SPAWN = IS_BAMBERG ? { x: 13, z: 19 } : IS_OVERVIEW ? { x: PLAYER_SPA
 // X-right/Y-up/Z-forward with its origin at ground/wheel-contact level, the
 // same convention the vehicle below uses, so no axis remapping is needed --
 // only the shape offset (the body sits above ground, not centered on it).
-const chassisHalfExtents = new CANNON.Vec3(0.466, 0.296, 0.714);
-const chassisShapeOffset = new CANNON.Vec3(0, 0.377, 0.112); // center of the body's bounding box, relative to the model's ground-level origin
+// from the truck model's own bounds (body 1.5 x 1.15 x 2.8 at y 0.4..1.55), times TRUCK_SCALE; +WHEEL_MOUNT because the
+// physics body rides that much above the model's ground-level origin (see WHEEL_MOUNT)
+const chassisHalfExtents = new CANNON.Vec3(0.75 * TRUCK_SCALE, 0.5 * TRUCK_SCALE, 1.4 * TRUCK_SCALE);
+const chassisShapeOffset = new CANNON.Vec3(0, 0.95 * TRUCK_SCALE - 0.25, 0);
 const chassisBody = new CANNON.Body({ mass: 55 }); // was 140 for the old, much larger primitive box -- this real kart is a smaller volume
 chassisBody.addShape(new CANNON.Box(chassisHalfExtents), chassisShapeOffset);
 chassisBody.position.set(KART_SPAWN.x, terrainHeight(KART_SPAWN.x, KART_SPAWN.z) + 2, KART_SPAWN.z);
@@ -1670,7 +1686,7 @@ const kartVehicle = new CANNON.RaycastVehicle({
   indexUpAxis: 1,
   indexForwardAxis: 2,
 });
-const wheelRadius = 0.21; // measured from the model's own wheel mesh bounds
+const wheelRadius = 0.3 * TRUCK_SCALE; // the truck's wheel meshes are 0.6 across
 const DRY_FRICTION_SLIP = 6; // was 1.5 -- Bruno's kart runs frictionSlip 10 on a much lighter (40 vs our 140 mass) chassis; our heavier chassis loads the suspension more, so this lands short of his raw number rather than matching it directly
 const WET_FRICTION_SLIP = 2.2; // applyWeather() swaps every wheel to this during rain -- wet asphalt grips much less
 const wheelBaseOptions: CANNON.WheelInfoOptions = {
@@ -1694,11 +1710,11 @@ const WHEEL_MOUNT = 0.25; // the physics body now rides this much higher; the mo
 // -right nodes (measured, not guessed) -- order matters here, it lines up
 // with WHEEL_FL..WHEEL_BR above and with the named-node lookup used to grab
 // the matching visual meshes further down.
-const wheelConnectionPoints: [number, number][] = [
-  [0.277372271, 0.323733032], // front left
-  [-0.277372271, 0.323733032], // front right
-  [0.277372271, -0.3606073], // back left
-  [-0.277372271, -0.3606073], // back right
+const wheelConnectionPoints: [number, number][] = [ // the truck's wheel node positions, scaled
+  [0.55 * TRUCK_SCALE, 0.86 * TRUCK_SCALE], // front left
+  [-0.55 * TRUCK_SCALE, 0.86 * TRUCK_SCALE], // front right
+  [0.55 * TRUCK_SCALE, -0.66 * TRUCK_SCALE], // back left
+  [-0.55 * TRUCK_SCALE, -0.66 * TRUCK_SCALE], // back right
 ];
 wheelConnectionPoints.forEach(([wx, wz]) => {
   // mounted WHEEL_MOUNT above the body's origin: after a hard landing the body can bottom out on the ground, and rays that
@@ -1711,6 +1727,7 @@ kartVehicle.addToWorld(physicsWorld);
 const kartGltf = await kartGltfPromise;
 const characterGltfs = await Promise.all(characterGltfPromises);
 const kartGroup = kartGltf.scene;
+kartGroup.scale.setScalar(TRUCK_SCALE);
 kartGroup.traverse((obj) => {
   const mesh = obj as THREE.Mesh;
   if (mesh.isMesh) { mesh.castShadow = true; mesh.receiveShadow = true; }
@@ -1724,6 +1741,7 @@ kartGroup.traverse((obj) => {
 const kartWheelMeshes: THREE.Object3D[] = ["wheel-front-left", "wheel-front-right", "wheel-back-left", "wheel-back-right"].map((name) => {
   const node = kartGroup.getObjectByName(name)!;
   scene.add(node);
+  node.scale.setScalar(TRUCK_SCALE);
   return node;
 });
 scene.add(kartGroup);
@@ -1754,7 +1772,7 @@ const HAS_RAMP = IS_BAMBERG || IS_OVERVIEW; // the dense old towns have no room 
 if (HAS_RAMP) physicsWorld.addBody(rampBody);
 const rampMesh = new THREE.Mesh(
   new THREE.BoxGeometry(RAMP_WIDTH, RAMP_THICK, RAMP_LEN),
-  new THREE.MeshStandardMaterial({ color: cssVar("--facade-yellow"), flatShading: true, roughness: 0.85, metalness: 0 })
+  new THREE.MeshStandardMaterial({ color: "#e3e4ee", flatShading: true, roughness: 0.85, metalness: 0 })
 );
 rampMesh.position.set(rampBody.position.x, rampBody.position.y, rampBody.position.z);
 rampMesh.quaternion.set(rampBody.quaternion.x, rampBody.quaternion.y, rampBody.quaternion.z, rampBody.quaternion.w);
