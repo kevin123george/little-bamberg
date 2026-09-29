@@ -13,6 +13,7 @@ import wuerzburgData from "./maps/wuerzburg.json";
 import regensburgData from "./maps/regensburg.json";
 import erlangenData from "./maps/erlangen.json";
 import augsburgData from "./maps/augsburg.json";
+import bayernData from "./maps/bayern.json";
 import bavariaOutline from "./bavaria.json";
 
 // ================= Which city (Little Bavaria) =================
@@ -23,10 +24,13 @@ type CityMeta = {
   id: string; name_en: string; name_ml: string; latlon: number[]; river_half_width: number;
   hills: { cx: number; cz: number; r: number; h: number }[];
   landmarks: { id: string; kind: string; points: number; label_en: string; flavor_en: string; label_ml: string; flavor_ml: string }[];
+  // the Bavaria overview ("road trip") only:
+  overview?: boolean; m_per_unit?: number; outline?: number[][]; rivers?: number[][][];
+  lakes?: { cx: number; cz: number; rx: number; rz: number }[]; portals?: { id: string; x: number; z: number }[];
 };
 const CITY_MAPS: Record<string, any> = {
   bamberg: bambergData, muenchen: muenchenData, nuernberg: nuernbergData, wuerzburg: wuerzburgData,
-  regensburg: regensburgData, erlangen: erlangenData, augsburg: augsburgData,
+  regensburg: regensburgData, erlangen: erlangenData, augsburg: augsburgData, bayern: bayernData,
 };
 const BAMBERG_META: CityMeta = { id: "bamberg", name_en: "Bamberg", name_ml: "ബാംബെർഗ്", latlon: [49.8918, 10.8869], river_half_width: 6, hills: [], landmarks: [] };
 const CITY_ID: string = (() => {
@@ -39,7 +43,8 @@ const CITY_ID: string = (() => {
 const IS_BAMBERG = CITY_ID === "bamberg";
 const mapData = CITY_MAPS[CITY_ID];
 const CITY: CityMeta = mapData.meta ?? BAMBERG_META;
-const ALL_CITIES: CityMeta[] = Object.keys(CITY_MAPS).map((k) => CITY_MAPS[k].meta ?? BAMBERG_META);
+const IS_OVERVIEW = !!CITY.overview;
+const ALL_CITIES: CityMeta[] = Object.keys(CITY_MAPS).map((k) => CITY_MAPS[k].meta ?? BAMBERG_META).filter((c) => !c.overview);
 
 // Real modeled assets (CC0, Kenney.nl -- "Car Kit" and "Blocky Characters")
 // instead of hand-built box primitives. Fetches start immediately here so
@@ -78,7 +83,7 @@ const MAP = mapData as {
   roads: { line: Footprint; width: number }[];
 };
 
-const HALF = 290; // map half-extent, x/z in [-HALF, HALF] -- sized to the real old-town spread
+const HALF = IS_OVERVIEW ? 600 : 290; // map half-extent, x/z in [-HALF, HALF] -- sized to the real old-town spread (all of Bavaria in the overview)
 
 function hillBump(x: number, z: number, cx: number, cz: number, radius: number, height: number): number {
   const d = Math.hypot(x - cx, z - cz);
@@ -131,9 +136,10 @@ function freeSpot(x0: number, z0: number): { x: number; z: number } {
 
 // Nearest distance from (x,z) to the real river polyline -- used to keep
 // trees and scatter buildings from sprouting out of the water.
+const RIVER_LINES: Footprint[] = [MAP.river_polyline, ...(CITY.rivers || [])].filter((l) => l.length >= 2);
 function distToRiver(x: number, z: number): number {
   let best = Infinity;
-  const line = MAP.river_polyline;
+  for (const line of RIVER_LINES)
   for (let i = 0; i < line.length - 1; i++) {
     const [ax, az] = line[i]!, [bx, bz] = line[i + 1]!;
     const abx = bx - ax, abz = bz - az;
@@ -498,6 +504,7 @@ const UI_TEXT: Record<Lang, Record<string, string>> = {
     travelHere: "നിങ്ങൾ ഇവിടെ",
     travelClose: "അടയ്ക്കുക",
     travelling: "യാത്ര ചെയ്യുന്നു…",
+    roadTrip: "🚗 ബവേറിയ മുഴുവൻ ഓടിക്കൂ",
     completeFlavor: "എല്ലാ സ്ഥലങ്ങളും കണ്ടു. കൊള്ളാം!",
     langChip: "English",
     sunAuto: "തത്സമയം",
@@ -534,6 +541,7 @@ const UI_TEXT: Record<Lang, Record<string, string>> = {
     travelHere: "You are here",
     travelClose: "Close",
     travelling: "Travelling…",
+    roadTrip: "🚗 Drive across Bavaria",
     completeFlavor: "You've seen every sight. Well done!",
     langChip: "മലയാളം",
     sunAuto: "Live",
@@ -576,12 +584,12 @@ composer.addPass(new OutputPass());
 
 let hemi: THREE.HemisphereLight;
 let ground: THREE.Mesh;
-let riverMesh: THREE.Mesh;
+let riverMesh: THREE.Mesh | undefined;
 
 const FOG_DAY = new THREE.Color("#d8cdb4"), FOG_NIGHT = new THREE.Color("#1c2233");
 function applyThemeColors() {
   scene.fog = new THREE.Fog(FOG_DAY.clone().lerp(FOG_NIGHT, nightFactor).getHex(), 160, 650);
-  if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(IS_BAMBERG ? cssVar("--grass") : "#cfc4ac");
+  if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(IS_BAMBERG ? cssVar("--grass") : IS_OVERVIEW ? "#9ea58f" : "#cfc4ac");
   if (riverMesh) (riverMesh.material as THREE.MeshStandardMaterial).color.set(cssVar("--regnitz"));
 }
 
@@ -779,11 +787,31 @@ updateSunFromRealTime();
 // ================= Ground, river, hills =================
 ground = new THREE.Mesh(
   new THREE.PlaneGeometry(HALF * 2.3, HALF * 2.3, 1, 1),
-  new THREE.MeshStandardMaterial({ color: IS_BAMBERG ? cssVar("--grass") : "#cfc4ac", map: createGrassTexture(), roughness: 1, metalness: 0 })
+  new THREE.MeshStandardMaterial({ color: IS_BAMBERG ? cssVar("--grass") : IS_OVERVIEW ? "#9ea58f" : "#cfc4ac", map: createGrassTexture(), roughness: 1, metalness: 0 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
+
+if (IS_OVERVIEW && CITY.outline) {
+  const land = new THREE.Mesh(new THREE.ShapeGeometry(footprintShape(CITY.outline as Footprint)),
+    new THREE.MeshStandardMaterial({ color: cssVar("--grass"), map: createGrassTexture(), roughness: 1 }));
+  land.rotateX(-Math.PI / 2); land.position.y = 0.03; land.receiveShadow = true; scene.add(land);
+  // the border in Bavaria's colours: white and blue dashes
+  const ol = CITY.outline;
+  for (let i = 0; i < ol.length; i++) {
+    const a = ol[i]!, b = ol[(i + 1) % ol.length]!;
+    const len = Math.hypot(b[0]! - a[0]!, b[1]! - a[1]!);
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(len, 0.5, 1.3), new THREE.MeshStandardMaterial({ color: i % 2 ? "#ffffff" : "#1f7ac2", roughness: 0.6 }));
+    seg.position.set((a[0]! + b[0]!) / 2, 0.25, (a[1]! + b[1]!) / 2);
+    seg.rotation.y = -Math.atan2(b[1]! - a[1]!, b[0]! - a[0]!);
+    scene.add(seg);
+  }
+  for (const lk of CITY.lakes || []) {
+    const lake = new THREE.Mesh(new THREE.CircleGeometry(1, 28), new THREE.MeshStandardMaterial({ color: cssVar("--regnitz"), roughness: 0.1, metalness: 0.35 }));
+    lake.scale.set(lk.rx, lk.rz, 1); lake.rotation.x = -Math.PI / 2; lake.position.set(lk.cx, 0.14, lk.cz); scene.add(lake);
+  }
+}
 
 function addHill(def: typeof DOMBERG, color: string) {
   const geo = new THREE.ConeGeometry(def.r, def.h, 9, 1, true);
@@ -796,14 +824,13 @@ if (IS_BAMBERG) {
   addHill(DOMBERG, cssVar("--sandstone-deep"));
   addHill(MICHAELSBERG, "#5c7a45");
 } else {
-  CITY.hills.forEach((hl) => addHill(hl, "#7d9a55"));
+  CITY.hills.forEach((hl) => addHill(hl, (hl as { snow?: boolean }).snow ? "#dfe5ea" : "#7d9a55"));
 }
 
 // Build a ribbon by offsetting the real Regnitz polyline perpendicular to
 // its own direction at each point -- a straightforward buffered-line
 // construction, not a fitted curve, but fine for a low-poly ribbon.
-if (MAP.river_polyline.length >= 2) {
-const riverLine = MAP.river_polyline;
+for (const riverLine of RIVER_LINES) {
 const riverShape = new THREE.Shape();
 const top: THREE.Vector2[] = [], bot: THREE.Vector2[] = [];
 for (let i = 0; i < riverLine.length; i++) {
@@ -824,9 +851,10 @@ bot.slice().reverse().forEach((p) => riverShape.lineTo(p.x, p.y));
 riverShape.closePath();
 const riverGeo = new THREE.ShapeGeometry(riverShape);
 riverGeo.rotateX(-Math.PI / 2);
-riverMesh = new THREE.Mesh(riverGeo, new THREE.MeshStandardMaterial({ color: cssVar("--regnitz"), roughness: 0.12, metalness: 0.35 }));
-riverMesh.position.y = 0.12;
-scene.add(riverMesh);
+const rm = new THREE.Mesh(riverGeo, new THREE.MeshStandardMaterial({ color: cssVar("--regnitz"), roughness: 0.12, metalness: 0.35 }));
+rm.position.y = 0.12;
+scene.add(rm);
+riverMesh = riverMesh || rm;
 }
 
 // Real pedestrian/residential streets -- same buffered-line ribbon
@@ -1133,6 +1161,66 @@ function buildCityLandmarks() {
           st.position.set(ux * t - uz * side * 2.2, 1.8, uz * t + ux * side * 2.2); st.castShadow = true; g.add(st);
         }
       }
+    } else if (kind === "fairy_castle") { // Neuschwanstein: white, slim towers with blue-grey pointed roofs
+      g = new THREE.Group();
+      const body = box(14, 10, 6, "#f4f1ea"); body.position.y = 5; body.castShadow = true; g.add(body);
+      const roof = pyramidRoof(14, 6, 4, "#5b6f86"); roof.position.y = 12; g.add(roof);
+      for (const [ox, oz, h, w] of [[-8, 0, 16, 2.6], [8, 1, 13, 2.2], [3, -4, 19, 2.2], [-3, 4, 11, 1.8], [0, 0, 22, 2.8]] as const) {
+        const t = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2, h, 10), new THREE.MeshStandardMaterial({ color: "#f4f1ea", roughness: 0.8 }));
+        t.position.set(ox, h / 2, oz); t.castShadow = true; g.add(t);
+        const c = new THREE.Mesh(new THREE.ConeGeometry(w * 0.7, w * 2.2, 10), new THREE.MeshStandardMaterial({ color: "#5b6f86", roughness: 0.6 }));
+        c.position.set(ox, h + w * 1.1, oz); g.add(c);
+      }
+    } else if (kind === "summit") { // a summit cross and flag on the highest mountain
+      g = new THREE.Group();
+      const post = box(0.8, 9, 0.8, cssVar("--gold")); post.position.y = 4.5; g.add(post);
+      const arm = box(5, 0.8, 0.8, cssVar("--gold")); arm.position.y = 6.8; g.add(arm);
+      const cairn = new THREE.Mesh(new THREE.ConeGeometry(3.4, 2.4, 7), new THREE.MeshStandardMaterial({ color: "#8a8f94", roughness: 1, flatShading: true }));
+      cairn.position.y = 1.2; g.add(cairn);
+    } else if (kind === "lake_chapel") { // St. Bartholomä: white chapel with red onion domes by the water
+      g = new THREE.Group();
+      const body = box(9, 5, 7, "#f4f0e6"); body.position.y = 2.5; body.castShadow = true; g.add(body);
+      for (const [ox, oz, r] of [[-3, 0, 2.2], [2.5, -1.5, 1.6], [2.5, 1.5, 1.6]] as const) {
+        const d = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), new THREE.MeshStandardMaterial({ color: "#b8483a", roughness: 0.6 }));
+        d.position.set(ox, 5 + r * 0.7, oz); d.scale.y = 1.25; g.add(d);
+      }
+    } else if (kind === "temple") { // Walhalla: a Greek temple on a stepped base
+      g = new THREE.Group();
+      for (let i = 0; i < 3; i++) { const st = box(26 - i * 2, 1.2, 14 - i * 2, "#d9d4c8"); st.position.y = 0.6 + i * 1.2; g.add(st); }
+      for (let i = 0; i < 8; i++) for (const zz of [-4.6, 4.6]) {
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 7, 10), new THREE.MeshStandardMaterial({ color: "#f2efe8", roughness: 0.7 }));
+        col.position.set(-9.8 + i * 2.8, 3.6 + 3.5, zz); col.castShadow = true; g.add(col);
+      }
+      const cella = box(18, 7, 6, "#e9e4d8"); cella.position.y = 7.1; g.add(cella);
+      const beam = box(22, 1.4, 11, "#ece8dd"); beam.position.y = 11.3; g.add(beam);
+      const roof = pyramidRoof(22, 11, 3, "#8c8579"); roof.position.y = 13.4; g.add(roof);
+    } else if (kind === "walled_town") { // Rothenburg: a ring wall with towers around red-roofed houses
+      g = new THREE.Group();
+      for (let i = 0; i < 20; i++) {
+        const a = (i / 20) * Math.PI * 2;
+        const w = box(5, 3, 1.2, "#d6c39e"); w.position.set(Math.cos(a) * 15, 1.5, Math.sin(a) * 15); w.rotation.y = -a + Math.PI / 2; w.castShadow = true; g.add(w);
+        if (i % 5 === 0) spire(g, Math.cos(a) * 15, Math.sin(a) * 15, 6, 2.6);
+      }
+      for (let i = 0; i < 9; i++) {
+        const hx = (Math.random() - 0.5) * 18, hz = (Math.random() - 0.5) * 18;
+        const hb = box(3, 3, 3, i % 2 ? "#f1e3c6" : "#e8c68c"); hb.position.set(hx, 1.5, hz); hb.castShadow = true; g.add(hb);
+        const hr = pyramidRoof(3.2, 3.2, 2.2, "#b8503a"); hr.position.set(hx, 4.1, hz); g.add(hr);
+      }
+    } else if (kind === "island_palace") { // Herrenchiemsee: a palace on a green island in the lake
+      g = new THREE.Group();
+      const island = new THREE.Mesh(new THREE.CylinderGeometry(11, 12, 0.6, 20), new THREE.MeshStandardMaterial({ color: cssVar("--grass"), roughness: 1 }));
+      island.position.y = 0.2; island.receiveShadow = true; g.add(island);
+      const pal = box(16, 6, 5, "#efe3c5"); pal.position.y = 3.5; pal.castShadow = true; g.add(pal);
+      for (const ox of [-7, 7]) { const wing = box(3.5, 6, 8, "#efe3c5"); wing.position.set(ox, 3.5, 3); g.add(wing); }
+      const trim = box(16.4, 0.6, 5.4, cssVar("--gold")); trim.position.y = 6.8; g.add(trim);
+    } else if (kind === "three_rivers") { // Passau: the cathedral with green domes
+      g = new THREE.Group();
+      const body = box(8, 9, 16, "#f3efe6"); body.position.y = 4.5; body.castShadow = true; g.add(body);
+      for (const [ox, oz, r] of [[-2.6, -8, 1.6], [2.6, -8, 1.6], [0, 5, 2.6]] as const) {
+        const tw = box(r * 1.6, 12, r * 1.6, "#f3efe6"); tw.position.set(ox, 6, oz); g.add(tw);
+        const d = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), new THREE.MeshStandardMaterial({ color: "#5c9a7d", roughness: 0.5, metalness: 0.2 }));
+        d.position.set(ox, 12 + r * 0.6, oz); d.scale.y = 1.3; g.add(d);
+      }
     } else if (!fp) { // a point only (castle node, small building): a keep with corner towers
       g = new THREE.Group();
       const keep = box(16, 12, 12, cssVar("--sandstone")); keep.position.y = 6; keep.castShadow = true; g.add(keep);
@@ -1231,6 +1319,24 @@ for (let t = 0; t < (CITY_HILLS.length ? 55 : 0); t++) {
   if (distToRiver(tx, tz) < RIVER_HALF_W + 4 || treeBlocked(tx, tz)) continue;
   addTree(tx, tz);
 }
+if (IS_OVERVIEW && CITY.outline) {
+  const nearWay = (x: number, z: number) => MAP.roads.some((r) => { const [a, b] = [r.line[0]!, r.line[r.line.length - 1]!];
+    const abx = b[0]! - a[0]!, abz = b[1]! - a[1]!, L = abx * abx + abz * abz || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]!) * abx + (z - a[1]!) * abz) / L));
+    return Math.hypot(x - (a[0]! + t * abx), z - (a[1]! + t * abz)) < 5; });
+  const nearGate = (x: number, z: number) => (CITY.portals || []).some((p) => Math.hypot(p.x - x, p.z - z) < 30) || LANDMARKS.some((l) => Math.hypot(l.x - x, l.z - z) < 22);
+  const inLake = (x: number, z: number) => (CITY.lakes || []).some((lk) => ((x - lk.cx) / lk.rx) ** 2 + ((z - lk.cz) / lk.rz) ** 2 < 1.4);
+  // forest clumps: a centre, then trees around it
+  for (let c = 0; c < 70; c++) {
+    const cx = (Math.random() - 0.5) * HALF * 1.9, cz = (Math.random() - 0.5) * HALF * 1.9;
+    if (!pointInPoly(cx, cz, CITY.outline as Footprint)) continue;
+    for (let k = 0; k < 14; k++) {
+      const tx = cx + (Math.random() - 0.5) * 36, tz = cz + (Math.random() - 0.5) * 36;
+      if (!pointInPoly(tx, tz, CITY.outline as Footprint) || distToRiver(tx, tz) < RIVER_HALF_W + 3 || nearWay(tx, tz) || nearGate(tx, tz) || inLake(tx, tz)) continue;
+      addTree(tx, tz, 1.4 + Math.random() * 0.8);
+    }
+  }
+}
 for (let t2 = 0; t2 < (IS_BAMBERG ? 14 : 0); t2++) {
   const tx2 = (Math.random() - 0.5) * HALF * 1.6, tz2 = (Math.random() - 0.5) * HALF * 1.6;
   if (distToRiver(tx2, tz2) < RIVER_HALF_W + 6) continue;
@@ -1293,7 +1399,7 @@ scene.add(trunkMesh, crownMesh);
 // Poles are always-unlit geometry; every bulb shares ONE material, so
 // updateStreetLamps() below is a single write regardless of lamp count.
 const lampPlacements: { x: number; z: number }[] = [];
-MAP.roads.forEach((road) => {
+(IS_OVERVIEW ? [] : MAP.roads).forEach((road) => {
   const line = road.line;
   for (let i = 0; i < line.length - 1; i++) {
     const [x1, z1] = line[i]!, [x2, z2] = line[i + 1]!;
@@ -1479,8 +1585,10 @@ LANDMARKS.forEach((l) => {
   physicsWorld.addBody(box);
 });
 
-const PLAYER_SPAWN = IS_BAMBERG ? { x: 10, z: 16 } : freeSpot(8, 8);
-const KART_SPAWN = IS_BAMBERG ? { x: 15, z: 21 } : freeSpot(PLAYER_SPAWN.x + 6, PLAYER_SPAWN.z + 6); // parked a few steps from the player
+const FROM_CITY = new URLSearchParams(location.search).get("from") || "nuernberg";
+const FROM_GATE = (CITY.portals || []).find((p) => p.id === FROM_CITY) || (CITY.portals || [])[0];
+const PLAYER_SPAWN = IS_BAMBERG ? { x: 10, z: 16 } : IS_OVERVIEW && FROM_GATE ? { x: FROM_GATE.x + 20, z: FROM_GATE.z + 22 } : freeSpot(8, 8);
+const KART_SPAWN = IS_BAMBERG ? { x: 15, z: 21 } : IS_OVERVIEW ? { x: PLAYER_SPAWN.x + 3, z: PLAYER_SPAWN.z + 2 } : freeSpot(PLAYER_SPAWN.x + 6, PLAYER_SPAWN.z + 6); // parked a few steps from the player
 // Dimensions measured directly from the Kenney kart-oobi glTF's own accessor
 // bounds (see the offline Python bounding-box extraction used while
 // integrating it), not eyeballed -- the physics collider matches the real
@@ -1791,7 +1899,7 @@ function updateGuide() {
   const t = new THREE.Vector3(best.x, 0, best.z).applyMatrix4(camera.matrixWorldInverse);
   document.getElementById("guideArrow")!.style.transform = `rotate(${Math.atan2(t.x - a.x, -(t.z - a.z))}rad)`;
   document.getElementById("guideName")!.textContent = tl(best).label + " · +" + best.points;
-  document.getElementById("guideDist")!.textContent = Math.round(bd) + " m";
+  document.getElementById("guideDist")!.textContent = IS_OVERVIEW ? Math.round((bd * (CITY.m_per_unit || 327)) / 1000) + " km" : Math.round(bd) + " m";
   el.style.display = "flex";
 }
 
@@ -2025,7 +2133,7 @@ function renderTravel() {
       <text x="${xy[0]! + (right ? 14 : -14)}" y="${xy[1]! - 2 + dy}" text-anchor="${right ? "start" : "end"}">${name(c)}</text>
       <text class="sub" x="${xy[0]! + (right ? 14 : -14)}" y="${xy[1]! + 14 + dy}" text-anchor="${right ? "start" : "end"}">${here ? tr("travelHere") + " · " : ""}${p.got}/${p.of}</text></g>`;
   }).join("");
-  document.getElementById("travelList")!.innerHTML = ALL_CITIES.map((c) => {
+  document.getElementById("travelList")!.innerHTML = `<button class="chip road" data-city="bayern" type="button"${IS_OVERVIEW ? ' aria-current="true"' : ""}>${tr("roadTrip")}</button>` + ALL_CITIES.map((c) => {
     const p = cityProgress(c);
     return `<button class="chip" data-city="${c.id}" type="button"${c.id === CITY_ID ? ' aria-current="true"' : ""}>${name(c)} · ${p.got}/${p.of}</button>`;
   }).join("");
@@ -2034,7 +2142,7 @@ function goToCity(id: string) {
   if (id === CITY_ID) { document.getElementById("travel")!.hidden = true; return; }
   try { localStorage.setItem("littleBamberg.city", id); } catch (e) {}
   document.getElementById("travelNote")!.textContent = tr("travelling");
-  location.search = "?city=" + encodeURIComponent(id);
+  location.search = "?city=" + encodeURIComponent(id) + (id === "bayern" ? "&from=" + encodeURIComponent(IS_OVERVIEW ? FROM_CITY : CITY_ID) : "");
 }
 function openTravel() { renderTravel(); document.getElementById("travel")!.hidden = false; }
 document.getElementById("travelToggle")!.addEventListener("click", openTravel);
@@ -2230,6 +2338,38 @@ const myNameEl = document.createElement("div");
 myNameEl.className = "label3d player me";
 document.getElementById("labels")!.appendChild(myNameEl);
 
+// ---- Road trip: a gate per city; walk or drive into it to go there
+const GATES = (CITY.portals || []).map((p) => {
+  const c = ALL_CITIES.find((x) => x.id === p.id)!;
+  const g = new THREE.Group();
+  for (const side of [-1, 1]) { const pil = box(2.2, 11, 2.2, cssVar("--sandstone")); pil.position.set(side * 6, 5.5, 0); pil.castShadow = true; g.add(pil); }
+  const lintel = box(15, 2, 2.6, cssVar("--roof")); lintel.position.y = 12; g.add(lintel);
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(5.5, 32), new THREE.MeshStandardMaterial({ color: "#ffe6a3", emissive: 0xffd26b, emissiveIntensity: 1.2, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+  glow.position.y = 5.8; g.add(glow);
+  g.position.set(p.x, terrainHeight(p.x, p.z), p.z);
+  scene.add(g);
+  const el = document.createElement("div");
+  el.className = "label3d gate";
+  document.getElementById("labels")!.appendChild(el);
+  return { ...p, city: c, group: g, el, glow };
+});
+let gateLeaving = false, gatesArmed = false; // armed once you've moved clear of every gate, so you never bounce straight back
+function checkGates(t: number) {
+  if (!GATES.length) return;
+  if (!gatesArmed && GATES.every((gt) => Math.hypot(player.x - gt.x, player.z - gt.z) > 14)) gatesArmed = true;
+  for (const gt of GATES) {
+    (gt.glow.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.9 + 0.4 * Math.sin(t / 400);
+    gt.el.textContent = "→ " + (lang === "ml" ? gt.city.name_ml : gt.city.name_en);
+    updateLabel(gt.el, new THREE.Vector3(gt.x, terrainHeight(gt.x, gt.z) + 16, gt.z));
+    if (joined && gatesArmed && !gateLeaving && Math.hypot(player.x - gt.x, player.z - gt.z) < 7) {
+      gateLeaving = true;
+      showToast({ label: tr("travelling"), flavor: lang === "ml" ? gt.city.name_ml : gt.city.name_en, points: 0 });
+      persistProgress();
+      setTimeout(() => goToCity(gt.id), 900);
+    }
+  }
+}
+
 const landmarkLabels = LANDMARKS.map((l) => {
   const el = document.createElement("div");
   el.className = "label3d";
@@ -2306,12 +2446,12 @@ const camTarget = new THREE.Vector3(0, 4, 0);
 // that angle on its own (doesn't snap back to "behind") while the target
 // keeps following the player every frame regardless of dragging.
 let occFrame = 0;
-let camYaw = 0, camPitch = IS_BAMBERG ? 0.62 : 0.86, camDist = IS_BAMBERG ? 30 : 34;
+let camYaw = 0, camPitch = IS_BAMBERG ? 0.62 : IS_OVERVIEW ? 0.95 : 0.86, camDist = IS_BAMBERG ? 30 : IS_OVERVIEW ? 110 : 34;
 // Karting gets its own chase-camera state -- closer, lower, and yaw-locked
 // behind the vehicle's heading by default (kartLookYaw is only a temporary
 // look-around offset from dragging, and springs back to 0 on release),
 // instead of reusing the walking camera's free-floating orbit.
-let kartLookYaw = 0, kartCamPitch = 0.28, kartCamDist = 11;
+let kartLookYaw = 0, kartCamPitch = IS_OVERVIEW ? 0.5 : 0.28, kartCamDist = IS_OVERVIEW ? 26 : 11;
 let dragging = false, lastPX = 0, lastPY = 0;
 let downPX = 0, downPY = 0, downAt = 0;
 const canvasEl = renderer.domElement;
@@ -2357,8 +2497,8 @@ canvasEl.addEventListener("pointercancel", endDrag);
 canvasEl.addEventListener("wheel", (e) => {
   if (!joined) return;
   e.preventDefault();
-  if (driving) kartCamDist = Math.max(6, Math.min(24, kartCamDist + e.deltaY * 0.03));
-  else camDist = Math.max(14, Math.min(70, camDist + e.deltaY * 0.05));
+  if (driving) kartCamDist = Math.max(6, Math.min(IS_OVERVIEW ? 60 : 24, kartCamDist + e.deltaY * 0.03));
+  else camDist = Math.max(14, Math.min(IS_OVERVIEW ? 220 : 70, camDist + e.deltaY * 0.05));
 }, { passive: false });
 
 function updateLabel(el: HTMLDivElement, worldPos: THREE.Vector3) {
@@ -2585,6 +2725,7 @@ function loop(t: number) {
     myNameEl.style.display = "none";
   }
 
+  checkGates(t);
   LANDMARKS.forEach((l, idx) => {
     const el = landmarkLabels[idx]!;
     const got = isCollected(l);
