@@ -19,7 +19,7 @@ const CLEAR = 1.7;  // bridge deck at least this far above the water
 
 export type Terrain = ReturnType<typeof buildTerrain>;
 
-export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }) {
+export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture; edgeTo?: (x: number, z: number) => number; skirt?: boolean }) {
   const toU = (m: number) => (m / td.m_per_unit) * VEX;
   const half = td.half, N = Math.round((half * 2) / FINE) + 1;
   const idx = (ix: number, iz: number) => iz * N + ix;
@@ -93,6 +93,16 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
     else if (wd[k]! < BANK) hg[k] = Math.max(hg[k]!, wnear[k]! + 0.35);
   }
 
+  // in the one big map: the outer band of the city blends into the countryside height, so there is no seam
+  if (opts.edgeTo) {
+    const BAND = 48;
+    for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) {
+      const x = -half + ix * FINE, z = -half + iz * FINE, b = half - Math.max(Math.abs(x), Math.abs(z));
+      if (b >= BAND) continue;
+      const u = Math.max(0, b / BAND), t = u * u * (3 - 2 * u), k = idx(ix, iz);
+      hg[k] = opts.edgeTo(x, z) + (hg[k]! - opts.edgeTo(x, z)) * t;
+    }
+  }
   const cell = (x: number, z: number) => {
     const ix = Math.max(0, Math.min(N - 1, Math.round((x + half) / FINE))), iz = Math.max(0, Math.min(N - 1, Math.round((z + half) / FINE)));
     return idx(ix, iz);
@@ -147,6 +157,7 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
 
   // ---- diorama edge: the map is a slab of earth, cut clean at the border (water shows in the cut too)
   const bottom = minH - 5;
+  if (opts.skirt !== false) {
   const skirt: number[] = [], skirtCol: number[] = [];
   const cSoil = new THREE.Color("#9b7652"), cSoilDeep = new THREE.Color("#6d4f36"), cCut = new THREE.Color("#4f9fd0");
   const quad = (ax: number, az: number, ay0: number, ay1: number, bx: number, bz: number, by0: number, by1: number, c0: THREE.Color, c1: THREE.Color) => {
@@ -168,6 +179,7 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
   skirtGeo.setAttribute("color", new THREE.Float32BufferAttribute(skirtCol, 3));
   skirtGeo.computeVertexNormals();
   group.add(new THREE.Mesh(skirtGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide })));
+  }
 
   // ---- water surfaces: flat at their own level, slightly see-through, with drifting ripples and a foam line
   const waveTex = (() => {
