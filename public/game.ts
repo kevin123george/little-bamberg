@@ -1652,6 +1652,13 @@ heightfieldBody.addShape(new CANNON.Heightfield(hfData, { elementSize: hfElement
 heightfieldBody.position.set(-HALF, 0, HALF);
 heightfieldBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
 physicsWorld.addBody(heightfieldBody);
+// the edge of the map: invisible walls, so the truck can't drive off into nothing
+for (const [x, z, hx, hz] of [[HALF + 1.5, 0, 1, HALF + 3], [-HALF - 1.5, 0, 1, HALF + 3], [0, HALF + 1.5, HALF + 3, 1], [0, -HALF - 1.5, HALF + 3, 1]] as const) {
+  const wall = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
+  wall.addShape(new CANNON.Box(new CANNON.Vec3(hx, 200, hz)));
+  wall.position.set(x, 0, z);
+  physicsWorld.addBody(wall);
+}
 for (const b of TER?.physBoxes ?? []) {
   const body = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
   body.addShape(new CANNON.Box(new CANNON.Vec3(b.half.x, b.half.y, b.half.z)));
@@ -2728,7 +2735,8 @@ function loop(t: number) {
     kartVehicle.setBrake(braking, WHEEL_BR);
 
     physicsWorld.step(1 / 60, dt, 5);
-    if (![chassisBody.position.x, chassisBody.position.y, chassisBody.position.z].every(Number.isFinite)) { // physics blew up
+    const fellOff = chassisBody.position.y < groundHeight(chassisBody.position.x, chassisBody.position.z) - 6; // through the ground or off the edge
+    if (fellOff || ![chassisBody.position.x, chassisBody.position.y, chassisBody.position.z].every(Number.isFinite)) { // physics blew up
       chassisBody.position.set(lastDry.x, groundHeight(lastDry.x, lastDry.z) + 1, lastDry.z);
       chassisBody.velocity.setZero(); chassisBody.angularVelocity.setZero(); chassisBody.quaternion.set(0, 0, 0, 1);
     }
