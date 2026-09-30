@@ -662,7 +662,7 @@ composer.addPass(satPass);
 const tiltH = new ShaderPass(HorizontalTiltShiftShader), tiltV = new ShaderPass(VerticalTiltShiftShader);
 tiltH.uniforms.r.value = tiltV.uniforms.r.value = 0.55;
 composer.addPass(tiltH); composer.addPass(tiltV);
-function sizeTiltShift(w: number, h: number) { tiltH.uniforms.h.value = 1.6 / w; tiltV.uniforms.v.value = 1.6 / h; }
+function sizeTiltShift(w: number, h: number) { tiltH.uniforms.h.value = 0.7 / w; tiltV.uniforms.v.value = 0.7 / h; }
 sizeTiltShift(container.clientWidth || 1280, container.clientHeight || 800);
 composer.addPass(new OutputPass());
 
@@ -1713,6 +1713,16 @@ function streamWorld(px: number, pz: number, budget: number) {
     physicsWorld.addBody(body); chunkBodies.set(c.key, body);
   }
 }
+// the edge of the world: invisible walls, so the truck can't drive off into nothing
+{
+  const B = TER.bounds, cx = (B.x0 + B.x1) / 2, cz = (B.z0 + B.z1) / 2, hx = (B.x1 - B.x0) / 2, hz = (B.z1 - B.z0) / 2;
+  for (const [x, z, sx, sz] of [[B.x1 + 1, cz, 1, hz + 3], [B.x0 - 1, cz, 1, hz + 3], [cx, B.z1 + 1, hx + 3, 1], [cx, B.z0 - 1, hx + 3, 1]] as const) {
+    const wall = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
+    wall.addShape(new CANNON.Box(new CANNON.Vec3(sx, 600, sz)));
+    wall.position.set(x, 0, z);
+    physicsWorld.addBody(wall);
+  }
+}
 for (const b of TER?.physBoxes ?? []) {
   const body = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
   body.addShape(new CANNON.Box(new CANNON.Vec3(b.half.x, b.half.y, b.half.z)));
@@ -2618,6 +2628,34 @@ function updateRegion(px: number, pz: number) {
   }
   if (name !== regionName) { regionName = name; const el = document.getElementById("txtScoreLabel"); if (el) el.textContent = name; }
 }
+/** While walking, the camera swings round behind you (unless you are dragging it). */
+function followHeading(nx: number, nz: number, dt: number) {
+  if (dragging || viewMode === "map") return;
+  const r = Math.atan2(-nx, -nz);
+  camYaw += Math.atan2(Math.sin(r - camYaw), Math.cos(r - camYaw)) * (1 - Math.exp(-dt * 3.2));
+}
+let treeHash: Map<string, { x: number; z: number; scale: number }[]> | null = null;
+function inTreeCrown(x: number, y: number, z: number): boolean {
+  if (!treeHash) {
+    treeHash = new Map();
+    for (const t of treePlacements) { const k = Math.floor(t.x / 10) + "," + Math.floor(t.z / 10); if (!treeHash.has(k)) treeHash.set(k, []); treeHash.get(k)!.push(t); }
+  }
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++)
+    for (const t of treeHash.get((Math.floor(x / 10) + dx) + "," + (Math.floor(z / 10) + dz)) || []) {
+      const gy = terrainHeight(t.x, t.z), cy = gy + 3.8 * t.scale;
+      if (Math.hypot(x - t.x, z - t.z) < 2.2 * t.scale && Math.abs(y - cy) < 2.4 * t.scale) return true;
+    }
+  return false;
+}
+/** Spring arm: walk out from the focus toward the wanted camera spot; stop just before ground, water or a house. */
+function springArm(focus: THREE.Vector3, dir: THREE.Vector3, len: number): number {
+  for (let e = 1.9; e < len; e += 0.3) {
+    const x = focus.x + dir.x * e, y = focus.y + dir.y * e, z = focus.z + dir.z * e;
+    const lv = TER ? TER.waterLevel(x, z) : NaN;
+    if (y < Math.max(terrainHeight(x, z), isNaN(lv) ? -Infinity : lv) + 0.35 || (y < terrainHeight(x, z) + 9 && insideSolid(x, z, 0)) || inTreeCrown(x, y, z)) return Math.max(1.9, e - 0.3);
+  }
+  return len;
+}
 function resize() {
   const w = container.clientWidth, h = container.clientHeight;
   renderer.setSize(w, h);
@@ -2642,17 +2680,28 @@ const camTarget = new THREE.Vector3(0, 4, 0);
 // that angle on its own (doesn't snap back to "behind") while the target
 // keeps following the player every frame regardless of dragging.
 let occFrame = 0;
-let camYaw = 0, camPitch = IS_OVERVIEW ? 0.95 : 0.85, camDist = IS_OVERVIEW ? 110 : 34;
+// The camera works like Little Kerala's: close behind you and low (over the shoulder), swinging round behind you as you
+// walk, on a spring arm that pulls in before hills, water and houses instead of passing through them. 🎥 cycles
+// follow -> first person -> map view of the whole town.
+let camYaw = 0.3, camPitch = IS_OVERVIEW ? 0.95 : 0.2, camDist = IS_OVERVIEW ? 110 : 6.5, camDistNow = camDist;
+const CAM_LENS = 1.25;
+let viewMode: "follow" | "first" | "map" = "follow";
 // A mobile-game camera: always looking down on the town (never skimming the grass), zoom within a range that keeps the
 // person readable. Pinch zooms on phones.
-const CAM_PITCH_MIN = IS_OVERVIEW ? 0.5 : 0.55, CAM_PITCH_MAX = 1.25;
-const CAM_DIST_MIN = IS_OVERVIEW ? 30 : 16, CAM_DIST_MAX = IS_OVERVIEW ? 220 : 60;
+const CAM_PITCH_MIN = -0.16, CAM_PITCH_MAX = 0.62;
+const CAM_DIST_MIN = 3.6, CAM_DIST_MAX = IS_OVERVIEW ? 220 : 76;
+function setView(v: typeof viewMode) {
+  viewMode = v;
+  camPitch = v === "map" ? 1.05 : v === "first" ? 0.02 : 0.2;
+  const b = document.getElementById("viewToggle"); if (b) b.textContent = v === "follow" ? "🎥" : v === "first" ? "👀" : "🗺️";
+}
+document.getElementById("viewToggle")?.addEventListener("click", () => setView(viewMode === "follow" ? "first" : viewMode === "first" ? "map" : "follow"));
 let camGroundY = NaN; // the ground height the camera follows, smoothed so steps onto bridges and terraces don't jolt it
 // Karting gets its own chase-camera state -- closer, lower, and yaw-locked
 // behind the vehicle's heading by default (kartLookYaw is only a temporary
 // look-around offset from dragging, and springs back to 0 on release),
 // instead of reusing the walking camera's free-floating orbit.
-let kartLookYaw = 0, kartCamPitch = IS_OVERVIEW ? 0.5 : 0.28, kartCamDist = IS_OVERVIEW ? 26 : 15;
+let kartLookYaw = 0, kartCamPitch = IS_OVERVIEW ? 0.5 : 0.2, kartCamDist = IS_OVERVIEW ? 26 : 12;
 let dragging = false, lastPX = 0, lastPY = 0;
 let downPX = 0, downPY = 0, downAt = 0;
 const canvasEl = renderer.domElement;
@@ -2687,7 +2736,7 @@ canvasEl.addEventListener("pointermove", (e) => {
     kartCamPitch = Math.max(0.15, Math.min(0.9, kartCamPitch + dy * 0.006));
   } else {
     camYaw -= dx * 0.006;
-    camPitch = Math.max(CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX, camPitch + dy * 0.006));
+    camPitch = Math.max(viewMode === "first" ? -0.5 : CAM_PITCH_MIN, Math.min(viewMode === "map" ? 1.4 : CAM_PITCH_MAX, camPitch + dy * 0.003));
   }
 });
 function endDrag(e: PointerEvent) {
@@ -2719,7 +2768,7 @@ canvasEl.addEventListener("wheel", (e) => {
   if (!joined) return;
   e.preventDefault();
   if (driving) kartCamDist = Math.max(6, Math.min(IS_OVERVIEW ? 60 : 24, kartCamDist + e.deltaY * 0.03));
-  else camDist = Math.max(CAM_DIST_MIN, Math.min(CAM_DIST_MAX, camDist + e.deltaY * 0.05));
+  else camDist = Math.max(CAM_DIST_MIN, Math.min(CAM_DIST_MAX, camDist * Math.exp(e.deltaY * 0.0012))); // proportional: fine close up, quick far out
 }, { passive: false });
 
 function updateLabel(el: HTMLDivElement, worldPos: THREE.Vector3) {
@@ -2810,7 +2859,8 @@ function loop(t: number) {
     kartVehicle.setBrake(braking, WHEEL_BR);
 
     physicsWorld.step(1 / 60, dt, 5);
-    if (![chassisBody.position.x, chassisBody.position.y, chassisBody.position.z].every(Number.isFinite)) { // physics blew up
+    const fellOff = chassisBody.position.y < groundHeight(chassisBody.position.x, chassisBody.position.z) - 6; // through the ground or off the edge
+    if (fellOff || ![chassisBody.position.x, chassisBody.position.y, chassisBody.position.z].every(Number.isFinite)) { // physics blew up
       chassisBody.position.set(lastDry.x, groundHeight(lastDry.x, lastDry.z) + 1, lastDry.z);
       chassisBody.velocity.setZero(); chassisBody.angularVelocity.setZero(); chassisBody.quaternion.set(0, 0, 0, 1);
     }
@@ -2901,6 +2951,7 @@ function loop(t: number) {
       const targetRot = Math.atan2(nx, nz);
       const diff = ((targetRot - player.rotY + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       player.rotY += diff * Math.min(1, dt * 10);
+      followHeading(nx, nz, dt);
       didMove = true;
     } else if (moveTarget) {
       const tdx = moveTarget.x - player.x, tdz = moveTarget.z - player.z;
@@ -2924,17 +2975,25 @@ function loop(t: number) {
     player.mesh!.position.set(player.x, groundY, player.z);
     player.mesh!.rotation.y = player.rotY;
 
-    const dist = camDist * Math.sqrt(Math.max(1, 1 / camera.aspect)); // phone held upright: step back so the view isn't a slit
-    const orbitOffset = new THREE.Vector3(
-      Math.sin(camYaw) * Math.cos(camPitch) * dist,
-      Math.sin(camPitch) * dist,
-      Math.cos(camYaw) * Math.cos(camPitch) * dist
-    );
     camGroundY = isNaN(camGroundY) ? groundY : camGroundY + (groundY - camGroundY) * Math.min(1, dt * 4);
-    const desiredCam = new THREE.Vector3(player.x + orbitOffset.x, camGroundY + 1.2 + orbitOffset.y, player.z + orbitOffset.z);
-    camPos.lerp(desiredCam, dragging ? 1 : Math.min(1, dt * 8));
-    camTarget.lerp(new THREE.Vector3(player.x, camGroundY + 1.2, player.z), Math.min(1, dt * 6));
-    if (camera.fov !== 52) { camera.fov = 52; camera.updateProjectionMatrix(); } // undo the kart's speed-FOV widening
+    const wantFov = viewMode === "first" ? 62 : 46;
+    if (camera.fov !== wantFov) { camera.fov = wantFov; camera.updateProjectionMatrix(); } // also undoes the kart's speed-FOV widening
+    player.mesh!.visible = viewMode !== "first";
+    if (viewMode === "first") { // your eyes, looking where the camera faces
+      camPos.set(player.x, groundY + 1.75, player.z);
+      camTarget.set(player.x - Math.sin(camYaw) * Math.cos(camPitch) * 10, groundY + 1.75 - Math.sin(camPitch) * 10, player.z - Math.cos(camYaw) * Math.cos(camPitch) * 10);
+    } else if (viewMode === "map") { // the whole town from above
+      camTarget.lerp(new THREE.Vector3(0, 2, 0), Math.min(1, dt * 3));
+      const d = HALF * 2.1;
+      camPos.lerp(new THREE.Vector3(Math.sin(camYaw) * Math.cos(camPitch) * d, Math.sin(camPitch) * d, Math.cos(camYaw) * Math.cos(camPitch) * d), Math.min(1, dt * 3));
+    } else {
+      const focus = new THREE.Vector3(player.x, camGroundY + 1.6, player.z);
+      camTarget.lerp(focus, 1 - Math.exp(-dt * 12));
+      camDistNow += (camDist - camDistNow) * (1 - Math.exp(-dt * 5));
+      const len = camDistNow * CAM_LENS * (camera.aspect < 0.8 ? 1.22 : 1); // phone held upright: step back a little
+      const dir = new THREE.Vector3(Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), Math.cos(camYaw) * Math.cos(camPitch));
+      camPos.copy(camTarget).addScaledVector(dir, springArm(camTarget, dir, len));
+    }
 
     const distToKart = Math.hypot(player.x - kartGroup.position.x, player.z - kartGroup.position.z);
     nearKart = distToKart < 6; // the truck is ~3.6 long: measured from its middle
@@ -2945,12 +3004,18 @@ function loop(t: number) {
     checkCollisions();
   }
 
-  if (TER) camPos.y = Math.max(camPos.y, terrainHeight(camPos.x, camPos.z) + 2.5);
+  if (TER && (driving || viewMode === "map")) camPos.y = Math.max(camPos.y, terrainHeight(camPos.x, camPos.z) + 2.5);
   camera.position.copy(camPos);
   camera.lookAt(camTarget);
   followShadow(camTarget.x, camTarget.z);
   updateGuide();
-  if ((occFrame = (occFrame + 1) % 2) === 0) updateOcclusion(camTarget, camPos);
+  if ((occFrame = (occFrame + 1) % 2) === 0) {
+    if (viewMode === "first" && !driving) updateOcclusion(camPos, camPos); // nothing between your eyes and you: clear any fade
+    else updateOcclusion(camTarget, camPos);
+  }
+  // map view looks at the whole town from ~600 up: push the fog out of the way while it's on
+  const fogFar = viewMode === "map" && !driving ? 2400 : 650, fog = scene.fog as THREE.Fog | null;
+  if (fog && fog.far !== fogFar) { fog.far = fogFar; fog.near = fogFar === 650 ? 160 : 1400; camera.far = fogFar === 650 ? 900 : 2600; camera.updateProjectionMatrix(); }
 
   Object.keys(peers).forEach((pid) => {
     const p = peers[pid]!;
@@ -2966,12 +3031,12 @@ function loop(t: number) {
     p.rotY += rd * Math.min(1, dt * 6);
     p.mesh.rotation.y = p.rotY;
     p.nameEl.textContent = p.target.name || "?";
-    updateLabel(p.nameEl, new THREE.Vector3(p.x, y + 2.8, p.z));
+    updateLabel(p.nameEl, new THREE.Vector3(p.x, y + 2.35, p.z));
   });
 
   if (joined) {
     myNameEl.textContent = state.name;
-    updateLabel(myNameEl, new THREE.Vector3(player.x, groundHeight(player.x, player.z) + 2.8, player.z));
+    updateLabel(myNameEl, new THREE.Vector3(player.x, groundHeight(player.x, player.z) + 2.35, player.z));
   } else {
     myNameEl.style.display = "none";
   }
