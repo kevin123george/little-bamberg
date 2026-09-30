@@ -11,7 +11,8 @@ import { HorizontalTiltShiftShader } from "three/examples/jsm/shaders/Horizontal
 import { VerticalTiltShiftShader } from "three/examples/jsm/shaders/VerticalTiltShiftShader.js";
 import { HueSaturationShader } from "three/examples/jsm/shaders/HueSaturationShader.js";
 import { LANDMARK_MODELS, neueResidenz, toyHouse } from "./landmarks";
-import { bake, nightGlowMaterials, C as TOY } from "./toykit";
+import { bake, nightGlowMaterials, C as TOY, rbox, tower, hip, statue } from "./toykit";
+import { buildTerrain, type TerrainData } from "./terrain";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import bambergData from "./bamberg-map-data.json";
 import muenchenData from "./maps/muenchen.json";
@@ -62,7 +63,9 @@ const gltfLoader = new GLTFLoader();
 const CHARACTER_VARIANTS = ["a", "b", "c", "d", "e", "f"];
 // Kenney "Starter Kit Racing" truck (CC0, via mrdoob's three.js port) -- see models/truck/LICENSE
 const kartGltfPromise = gltfLoader.loadAsync("./models/truck/vehicle-truck-yellow.glb");
-const TRUCK_SCALE = 0.62; // the model is 1.5 x 2.8 m; this makes it kart-sized next to the characters
+// One toy scale for everything: a person is 2 units tall, the truck ~3.6 long and 1.5 high (about 1.8x a person, like a
+// small car next to a chunky figure), house doors 2.4 and floors 2.6, so people fit through doors and under eaves.
+const TRUCK_SCALE = 1.3; // the model is 1.5 x 2.8 m
 const characterGltfPromises = CHARACTER_VARIANTS.map((v) => gltfLoader.loadAsync(`./models/characters/character-${v}.glb`));
 
 // The 3D town keeps ONE palette whatever the page theme is (dark mode used to swap in muddy
@@ -92,6 +95,10 @@ const MAP = mapData as {
   roads: { line: Footprint; width: number }[];
 };
 
+// Real ground for the cities: survey heights, the real water and bridges (terrain.ts). The overview keeps its hills.
+const TERRAIN_DATA: TerrainData | null = IS_OVERVIEW ? null
+  : await fetch(`./terrain/${CITY_ID}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+const TER = TERRAIN_DATA ? buildTerrain(TERRAIN_DATA, { grassMap: (() => { const t = createGrassTexture(); t.repeat.set(1, 1); return t; })() }) : null;
 const HALF = IS_OVERVIEW ? 600 : 290; // map half-extent, x/z in [-HALF, HALF] -- sized to the real old-town spread (all of Bavaria in the overview)
 
 function hillBump(x: number, z: number, cx: number, cz: number, radius: number, height: number): number {
@@ -106,13 +113,18 @@ function hillBump(x: number, z: number, cx: number, cz: number, radius: number, 
 // before, just anchored to their real positions now instead of invented ones.
 const DOMBERG = IS_BAMBERG ? { cx: MAP.landmarks.dom!.center[0]!, cz: MAP.landmarks.dom!.center[1]!, r: 100, h: 17 } : { cx: 0, cz: 0, r: 1, h: 0 };
 const MICHAELSBERG = { cx: -264, cz: -138, r: 90, h: 14 };
-const CITY_HILLS = IS_BAMBERG ? [DOMBERG, MICHAELSBERG] : CITY.hills;
+const CITY_HILLS = TERRAIN_DATA ? [] : IS_BAMBERG ? [DOMBERG, MICHAELSBERG] : CITY.hills;
 function terrainHeight(x: number, z: number): number {
+  if (TER) return TER.height(x, z);
   let y = 0;
   for (const hl of CITY_HILLS) y += hillBump(x, z, hl.cx, hl.cz, hl.r, hl.h);
   return y;
 }
 
+/** Where feet and wheels go: a bridge deck when on one, else the ground. */
+function groundHeight(x: number, z: number): number { return TER ? TER.surface(x, z) : terrainHeight(x, z); }
+/** Distance to the water's edge (0 or less = in the water). */
+function waterDist(x: number, z: number): number { return TER ? TER.waterDist(x, z) : distToRiver(x, z) - RIVER_HALF_W; }
 const RIVER_HALF_W = IS_BAMBERG ? 6 : (CITY.river_half_width || 6); // half-width of the extruded river ribbon, in scaled meters
 
 // A spot near (x0, z0) that isn't inside a building, a landmark or the river (spiral search), for spawns.
@@ -127,7 +139,7 @@ function pointInPoly(x: number, z: number, f: Footprint): boolean {
 function freeSpot(x0: number, z0: number): { x: number; z: number } {
   // prefer a point on a real street near (x0, z0): courtyards are "free" too, but you can't see or leave them
   const polysAll: Footprint[] = [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
-  const clear = (x: number, z: number) => distToRiver(x, z) >= RIVER_HALF_W + 4 &&
+  const clear = (x: number, z: number) => waterDist(x, z) >= 4 &&
     !polysAll.some((f) => pointInPoly(x, z, f) || pointInPoly(x + 3, z, f) || pointInPoly(x - 3, z, f) || pointInPoly(x, z + 3, f) || pointInPoly(x, z - 3, f));
   const roadPts = MAP.roads.flatMap((r) => r.line).map((p) => ({ x: p[0]!, z: p[1]!, d: Math.hypot(p[0]! - x0, p[1]! - z0) }))
     .filter((p) => p.d < 120).sort((a, b) => a.d - b.d);
@@ -136,7 +148,7 @@ function freeSpot(x0: number, z0: number): { x: number; z: number } {
   for (let r = 0; r < 160; r += 2) {
     for (let a = 0; a < 16; a++) {
       const x = x0 + Math.cos((a / 16) * Math.PI * 2) * r, z = z0 + Math.sin((a / 16) * Math.PI * 2) * r;
-      if (distToRiver(x, z) < RIVER_HALF_W + 4) continue;
+      if (waterDist(x, z) < 4) continue;
       if (!polys.some((f) => pointInPoly(x, z, f) || pointInPoly(x + 3, z, f) || pointInPoly(x - 3, z, f) || pointInPoly(x, z + 3, f) || pointInPoly(x, z - 3, f))) return { x, z };
     }
   }
@@ -608,7 +620,7 @@ let riverMesh: THREE.Mesh | undefined;
 const FOG_DAY = new THREE.Color("#c3cbd2"), FOG_NIGHT = new THREE.Color("#1c2233");
 function applyThemeColors() {
   scene.fog = new THREE.Fog(FOG_DAY.clone().lerp(FOG_NIGHT, nightFactor).getHex(), 160, 650);
-  if (ground) (ground.material as THREE.MeshStandardMaterial).color.set(IS_OVERVIEW ? "#b9c8a0" : cssVar("--grass"));
+  if (ground && !TER) (ground.material as THREE.MeshStandardMaterial).color.set(IS_OVERVIEW ? "#b9c8a0" : cssVar("--grass"));
   if (riverMesh) (riverMesh.material as THREE.MeshStandardMaterial).color.set(cssVar("--regnitz"));
 }
 
@@ -680,6 +692,7 @@ function setSunAngle(elevationDeg: number, thetaDeg: number) {
   if (lightDir.y < 0.25) { lightDir.y = 0.25; lightDir.normalize(); }
   sun.color.copy(SUN_COLOR_DAY).lerp(MOON_COLOR, nightFactor);
   sun.intensity = SUN_BASE_INTENSITY * (0.3 + 0.7 * dayFactor);
+  bloomPass.strength = 0.1 + 0.45 * nightFactor; // glow is for lit windows and lamps; by day it only haloed sunlit slopes
   renderer.toneMappingExposure = 1.0 + 0.1 * nightFactor;
   updateEnvironment(dayFactor);
   skyUniforms.showSunDisc.value = dayFactor > 0.02 ? 1 : 0;
@@ -804,13 +817,12 @@ scene.add(moon);
 updateSunFromRealTime();
 
 // ================= Ground, river, hills =================
-ground = new THREE.Mesh(
+if (TER) scene.add(TER.group);
+ground = TER ? TER.ground : new THREE.Mesh(
   new THREE.PlaneGeometry(HALF * 2.3, HALF * 2.3, 1, 1),
   new THREE.MeshStandardMaterial({ color: IS_OVERVIEW ? "#b9c8a0" : cssVar("--grass"), map: createGrassTexture(), roughness: 1, metalness: 0 })
 );
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
+if (!TER) { ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground); }
 
 if (IS_OVERVIEW && CITY.outline) {
   const land = new THREE.Mesh(new THREE.ShapeGeometry(footprintShape(CITY.outline as Footprint)),
@@ -839,7 +851,9 @@ function addHill(def: typeof DOMBERG, color: string) {
   mesh.receiveShadow = true;
   scene.add(mesh);
 }
-if (IS_BAMBERG) {
+if (TER) {
+  // real hills come with the terrain
+} else if (IS_BAMBERG) {
   addHill(DOMBERG, cssVar("--sandstone-deep"));
   addHill(MICHAELSBERG, "#5c7a45");
 } else {
@@ -849,7 +863,7 @@ if (IS_BAMBERG) {
 // Build a ribbon by offsetting the real Regnitz polyline perpendicular to
 // its own direction at each point -- a straightforward buffered-line
 // construction, not a fitted curve, but fine for a low-poly ribbon.
-for (const riverLine of RIVER_LINES) {
+for (const riverLine of TER ? [] : RIVER_LINES) {
 const riverShape = new THREE.Shape();
 const top: THREE.Vector2[] = [], bot: THREE.Vector2[] = [];
 for (let i = 0; i < riverLine.length; i++) {
@@ -875,6 +889,7 @@ rm.position.y = 0.12;
 scene.add(rm);
 riverMesh = riverMesh || rm;
 }
+if (TER?.waterMesh) riverMesh = TER.waterMesh;
 
 // Real pedestrian/residential streets -- same buffered-line ribbon
 // technique as the river, just thinner and paved-colored, laid flush on
@@ -914,7 +929,18 @@ const kerbMat = new THREE.MeshStandardMaterial({ color: IS_OVERVIEW ? "#e3e4ee" 
 const roadMaterials: THREE.MeshStandardMaterial[] = [];
 // every street as a ribbon, asphalt over a slightly wider light kerb; all merged into two meshes (two draw calls instead
 // of one per street) and lifted onto the terrain
+function densify(line: Footprint, step: number): Footprint {
+  const out: Footprint = [];
+  for (let i = 0; i < line.length - 1; i++) {
+    const [ax, az] = line[i]! as [number, number], [bx, bz] = line[i + 1]! as [number, number];
+    const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / step));
+    for (let j = 0; j < n; j++) out.push([ax + ((bx - ax) * j) / n, az + ((bz - az) * j) / n]);
+  }
+  out.push(line[line.length - 1]!);
+  return out;
+}
 function ribbon(line: Footprint, halfW: number, lift: number): THREE.BufferGeometry {
+  if (TER) { line = densify(line, 2); lift += 0.12; }
   const shape = new THREE.Shape();
   const rTop: THREE.Vector2[] = [], rBot: THREE.Vector2[] = [];
   for (let i = 0; i < line.length; i++) {
@@ -934,7 +960,7 @@ function ribbon(line: Footprint, halfW: number, lift: number): THREE.BufferGeome
   const geo = new THREE.ShapeGeometry(shape);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < pos.count; i++) pos.setY(i, terrainHeight(pos.getX(i), pos.getZ(i)) + lift);
+  for (let i = 0; i < pos.count; i++) pos.setY(i, groundHeight(pos.getX(i), pos.getZ(i)) + lift);
   return geo;
 }
 const asphaltGeos: THREE.BufferGeometry[] = [], kerbGeos: THREE.BufferGeometry[] = [];
@@ -953,7 +979,7 @@ if (asphaltGeos.length) {
 }
 
 // vineyard terrace stripes on Michaelsberg
-for (let vr = MICHAELSBERG.r * 0.25; IS_BAMBERG && vr < MICHAELSBERG.r * 0.85; vr += 7) {
+for (let vr = MICHAELSBERG.r * 0.25; IS_BAMBERG && !TER && vr < MICHAELSBERG.r * 0.85; vr += 7) {
   const stripGeo = new THREE.TorusGeometry(vr, 0.5, 4, 20, Math.PI * 1.1);
   const strip = new THREE.Mesh(stripGeo, new THREE.MeshStandardMaterial({ color: "#7a9a56", flatShading: true, metalness: 0 }));
   strip.rotation.x = Math.PI / 2;
@@ -1010,6 +1036,19 @@ function obb(fp: Footprint): { w: number; d: number; angle: number; cx: number; 
   if (d > w) { [w, d] = [d, w]; ang += Math.PI / 2; }
   return { w, d, angle: ang, cx: uc * c - vc * sn, cz: uc * sn + vc * c };
 }
+/** Lowest and highest ground under a (rotated) box footprint. */
+function groundSpan(x: number, z: number, hx: number, hz: number, yaw: number): { lo: number; hi: number } {
+  let lo = Infinity, hi = -Infinity;
+  const c = Math.cos(yaw), sn = Math.sin(yaw);
+  for (const u of [-1, -0.5, 0, 0.5, 1]) for (const v of [-1, -0.5, 0, 0.5, 1]) {
+    const px = x + u * hx * c + v * hz * sn, pz = z - u * hx * sn + v * hz * c;
+    if (TER?.inWater(px, pz)) continue;
+    const h = terrainHeight(px, pz);
+    lo = Math.min(lo, h); hi = Math.max(hi, h);
+  }
+  if (lo === Infinity) lo = hi = terrainHeight(x, z);
+  return { lo, hi };
+}
 /** Place a baked model: long side along the real outline's long side, front (+z) toward the town centre. */
 function placeModel(model: THREE.Object3D, x: number, z: number, o: { angle: number } | null): THREE.Object3D {
   const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
@@ -1018,9 +1057,45 @@ function placeModel(model: THREE.Object3D, x: number, z: number, o: { angle: num
   if (!o) yaw = Math.atan2(tx / tl2, tz / tl2);
   else if (Math.sin(yaw) * tx + Math.cos(yaw) * tz < 0) yaw += Math.PI;
   model.rotation.y = yaw;
-  model.position.set(x, terrainHeight(x, z), z);
+  const { lo, hi } = groundSpan(x, z, size.x / 2, size.z / 2, yaw);
+  model.position.set(x, hi, z);
+  if (hi - lo > 0.25) { // a sandstone terrace under the downhill side, so nothing floats
+    const pl = rbox(size.x + 1.2, hi - lo + 1, size.z + 1.2, "#d7c29a", 0.3);
+    pl.position.set(x, lo - 1, z); pl.rotation.y = yaw; pl.castShadow = pl.receiveShadow = true;
+    scene.add(pl);
+  }
   scene.add(model);
   return model;
+}
+/** A landmark bridge in a real-terrain city: the drivable stone bridge already stands there (terrain.ts), so this adds what
+ *  makes it that bridge -- saints on the parapets of Würzburg's Alte Mainbrücke, the bridge tower at the old-town end of
+ *  Regensburg's Steinerne Brücke. */
+function decorateBridge(id: string, b: { xs: number[]; zs: number[]; deck: number[]; hw: number }): THREE.Object3D {
+  const g = new THREE.Group(), n = b.xs.length;
+  const dirAt = (i: number) => { const p = Math.max(0, i - 1), q = Math.min(n - 1, i + 1); return Math.atan2(b.xs[q]! - b.xs[p]!, b.zs[q]! - b.zs[p]!); };
+  if (id === "steinerne_bruecke") {
+    const end = Math.hypot(b.xs[0]!, b.zs[0]!) < Math.hypot(b.xs[n - 1]!, b.zs[n - 1]!) ? 2 : n - 3; // the end nearer the old town
+    const w = b.hw * 2 + 2.2, t = new THREE.Group();
+    for (const s of [-1, 1]) { const pier = tower(1.4, 4.2, "#d9c7a5", { d: 4, windows: 0 }); pier.position.x = s * (b.hw + 0.4); t.add(pier); }
+    const top = tower(w, 7, "#d9c7a5", { d: 4, windows: 2, clock: true, clockY: 5 });
+    top.position.y = 4.2; t.add(top);
+    const roof = hip(w, 4.4, 3.4, TOY.roofDark); roof.position.y = 11.2; t.add(roof);
+    t.position.set(b.xs[end]!, b.deck[end]!, b.zs[end]!); t.rotation.y = dirAt(end); // local z along the bridge, so the gate spans across it
+    g.add(t);
+  } else { // statues on both parapets, evenly along the bridge
+    const count = Math.max(4, Math.min(12, Math.round(n / 7)));
+    for (let k = 0; k < count; k++) {
+      const i = Math.round(((k + 0.5) / count) * (n - 1)), yaw = dirAt(i), cx = Math.cos(yaw), sz = Math.sin(yaw);
+      for (const s of [-1, 1]) {
+        const st = statue(1.9, "#b5a88e", "#c9b184");
+        st.position.set(b.xs[i]! + cx * s * (b.hw - 0.15), b.deck[i]! + 0.7, b.zs[i]! - sz * s * (b.hw - 0.15));
+        st.rotation.y = yaw; g.add(st);
+      }
+    }
+  }
+  const baked = bake(g);
+  scene.add(baked);
+  return baked;
 }
 function buildToyLandmarks() {
   const models = LANDMARK_MODELS[CITY_ID] || {};
@@ -1029,12 +1104,15 @@ function buildToyLandmarks() {
     const o = fp && fp.length >= 3 ? obb(fp) : null;
     const build = models[l.id];
     if (!build) continue;
+    const realBridge = TER && l.kind === "bridge" ? TER.bridgeNear(l.x, l.z, o ? Math.max(o.w, o.d) / 2 + 6 : 20) : null;
+    if (realBridge) { l.mesh = decorateBridge(l.id, realBridge); continue; } // the real bridge is the model; add its landmarks' details
     const model = bake(build(o ? o.w : 0, o ? o.d : 0));
     // a paved toy base under every sight
     const base = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.14, 32), new THREE.MeshStandardMaterial({ color: "#eee2c8", roughness: 0.9 }));
     const br = o ? Math.min(24, Math.hypot(o.w, o.d) / 2 + 3) : 8;
-    base.scale.set(br, 1, br); base.position.set(l.x, terrainHeight(l.x, l.z) + 0.04, l.z); base.receiveShadow = true;
-    if (!IS_OVERVIEW && l.kind !== "bridge") scene.add(base);
+    const span = groundSpan(l.x, l.z, br * 0.7, br * 0.7, 0);
+    base.scale.set(br, 1 + (span.hi - span.lo) / 0.14, br); base.position.set(l.x, (span.hi + span.lo) / 2 + 0.04, l.z); base.receiveShadow = true;
+    if (!IS_OVERVIEW && l.kind !== "bridge" && waterDist(l.x, l.z) > br) scene.add(base);
     l.mesh = placeModel(model, l.x, l.z, o);
   }
   if (IS_BAMBERG && MAP.landmarks.neue_residenz?.footprint) {
@@ -1214,7 +1292,7 @@ function scatterHouses() {
   const roofs = [TOY.roof, TOY.roofDark, "#e27a4e"];
   const lmR = LANDMARKS.map((l) => { const fp = MAP.landmarks[l.id]?.footprint as Footprint | undefined; const o = fp && fp.length >= 3 ? obb(fp) : null; return { x: l.x, z: l.z, r: o ? Math.hypot(o.w, o.d) / 2 + 7 : 16 }; });
   const cand = MAP.scatter_buildings.map((b) => obb(b.footprint as Footprint))
-    .filter((o) => !lmR.some((l) => Math.hypot(l.x - o.cx, l.z - o.cz) < l.r) && distToRiver(o.cx, o.cz) > RIVER_HALF_W + 3);
+    .filter((o) => !lmR.some((l) => Math.hypot(l.x - o.cx, l.z - o.cz) < l.r) && waterDist(o.cx, o.cz) > 3);
   const limit = IS_OVERVIEW ? cand.length : 130;
   cand.sort((a, b) => Math.hypot(a.cx, a.cz) - Math.hypot(b.cx, b.cz));
   const all = new THREE.Group();
@@ -1231,8 +1309,10 @@ function scatterHouses() {
   picked.forEach(({ o, w, d }, i) => {
     const h = toyHouse(w, d, IS_OVERVIEW ? 1 : 2 + (i % 3 === 0 ? 1 : 0), walls[i % walls.length]!, roofs[(i * 7) % roofs.length]!, i % 6 === 0);
     h.rotation.y = -o.angle + (i % 2 ? Math.PI : 0);
-    h.position.set(o.cx, terrainHeight(o.cx, o.cz), o.cz);
+    const sp = groundSpan(o.cx, o.cz, w / 2, d / 2, h.rotation.y);
+    h.position.set(o.cx, sp.hi, o.cz);
     all.add(h);
+    if (sp.hi - sp.lo > 0.2) { const pl = rbox(w + 0.5, sp.hi - sp.lo + 0.8, d + 0.5, "#cdb48a", 0.2); pl.position.set(o.cx, sp.lo - 0.8, o.cz); pl.rotation.y = h.rotation.y; all.add(pl); }
     const c = Math.cos(o.angle), sn = Math.sin(o.angle);
     HOUSE_RECTS.push([[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([u, v]) => [o.cx + u! * c - v! * sn, o.cz + u! * sn + v! * c]));
   });
@@ -1247,6 +1327,7 @@ const treePlacements: { x: number; z: number; scale: number }[] = [];
 function addTree(x: number, z: number, scale = 1) {
   treePlacements.push({ x, z, scale });
 }
+function insideHouse(x: number, z: number): boolean { return HOUSE_RECTS.some((f) => Math.abs(f[0]![0]! - x) < 14 && Math.abs(f[0]![1]! - z) < 14 && pointInPoly(x, z, f)); }
 const TREE_BLOCKERS: Footprint[] = IS_BAMBERG ? [] : [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
 function treeBlocked(x: number, z: number): boolean {
   if (IS_BAMBERG) return false;
@@ -1262,7 +1343,7 @@ for (let t = 0; t < (CITY_HILLS.length ? 55 : 0); t++) {
   const pick = CITY_HILLS[Math.floor(Math.random() * CITY_HILLS.length)]!;
   const rad = pick.r * (0.3 + Math.random() * 0.75);
   const tx = pick.cx + Math.cos(ang) * rad, tz = pick.cz + Math.sin(ang) * rad;
-  if (distToRiver(tx, tz) < RIVER_HALF_W + 4 || treeBlocked(tx, tz)) continue;
+  if (waterDist(tx, tz) < 4 || treeBlocked(tx, tz)) continue;
   addTree(tx, tz);
 }
 if (IS_OVERVIEW && CITY.outline) {
@@ -1278,14 +1359,20 @@ if (IS_OVERVIEW && CITY.outline) {
     if (!pointInPoly(cx, cz, CITY.outline as Footprint)) continue;
     for (let k = 0; k < 14; k++) {
       const tx = cx + (Math.random() - 0.5) * 36, tz = cz + (Math.random() - 0.5) * 36;
-      if (!pointInPoly(tx, tz, CITY.outline as Footprint) || distToRiver(tx, tz) < RIVER_HALF_W + 3 || nearWay(tx, tz) || nearGate(tx, tz) || inLake(tx, tz)) continue;
+      if (!pointInPoly(tx, tz, CITY.outline as Footprint) || waterDist(tx, tz) < 3 || nearWay(tx, tz) || nearGate(tx, tz) || inLake(tx, tz)) continue;
       addTree(tx, tz, 1.4 + Math.random() * 0.8);
     }
   }
 }
-for (let t2 = 0; t2 < (IS_BAMBERG ? 14 : 0); t2++) {
+for (let t3 = 0, placed = 0; TER && t3 < 2000 && placed < 90; t3++) { // woods and gardens on the real slopes
+  const tx = (Math.random() - 0.5) * HALF * 1.95, tz = (Math.random() - 0.5) * HALF * 1.95;
+  const hh = terrainHeight(tx, tz), rel = (hh - TER.minH) / Math.max(1, TER.maxH - TER.minH);
+  if (rel < 0.35 || waterDist(tx, tz) < 3 || treeBlocked(tx, tz) || insideHouse(tx, tz)) continue;
+  addTree(tx, tz); placed++;
+}
+for (let t2 = 0; t2 < (IS_BAMBERG && !TER ? 14 : 0); t2++) {
   const tx2 = (Math.random() - 0.5) * HALF * 1.6, tz2 = (Math.random() - 0.5) * HALF * 1.6;
-  if (distToRiver(tx2, tz2) < RIVER_HALF_W + 6) continue;
+  if (waterDist(tx2, tz2) < 6) continue;
   addTree(tx2, tz2);
 }
 // Avenue trees: walk each real street and drop trees along its verge, offset
@@ -1307,7 +1394,7 @@ MAP.roads.forEach((road) => {
       const side = Math.random() < 0.5 ? 1 : -1;
       const offset = road.width / 2 + 2.2;
       const fx = mx + perpX * offset * side, fz = mz + perpZ * offset * side;
-      if (distToRiver(fx, fz) < RIVER_HALF_W + 3 || treeBlocked(fx, fz)) continue;
+      if (waterDist(fx, fz) < 3 || treeBlocked(fx, fz)) continue;
       if (!IS_BAMBERG && (road.width < 3 || Math.random() < 0.5)) continue; // big cities: fewer street trees, main streets only
       addTree(fx, fz, 0.85 + Math.random() * 0.3);
     }
@@ -1367,7 +1454,7 @@ const lampPlacements: { x: number; z: number }[] = [];
       const side = Math.random() < 0.5 ? 1 : -1;
       const offset = road.width / 2 + 1.4;
       const fx = mx + perpX * offset * side, fz = mz + perpZ * offset * side;
-      if (distToRiver(fx, fz) < RIVER_HALF_W + 3) continue;
+      if (waterDist(fx, fz) < 3) continue;
       lampPlacements.push({ x: fx, z: fz });
     }
   }
@@ -1509,7 +1596,7 @@ const groundPhysMaterial = new CANNON.Material("ground");
 // local Z (height) to world Y (up) and local Y to world -Z, which is why the
 // sample loop below reads worldZ = HALF - yi*elementSize (derived from that
 // rotation, not guessed).
-const HF_SEGMENTS = 64;
+const HF_SEGMENTS = TER ? 290 : 64; // 2 units with real terrain: the same grid as the drawn ground, so no hidden kerbs
 const hfElementSize = (HALF * 2) / HF_SEGMENTS;
 const hfData: number[][] = [];
 for (let xi = 0; xi <= HF_SEGMENTS; xi++) {
@@ -1525,6 +1612,13 @@ heightfieldBody.addShape(new CANNON.Heightfield(hfData, { elementSize: hfElement
 heightfieldBody.position.set(-HALF, 0, HALF);
 heightfieldBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
 physicsWorld.addBody(heightfieldBody);
+for (const b of TER?.physBoxes ?? []) {
+  const body = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(b.half.x, b.half.y, b.half.z)));
+  body.position.set(b.pos.x, b.pos.y, b.pos.z);
+  body.quaternion.set(b.quat.x, b.quat.y, b.quat.z, b.quat.w);
+  physicsWorld.addBody(body);
+}
 
 // Landmark buildings get a rough static box collider each, so the kart can
 // bump into the big sights. The ~260 background scatter buildings stay
@@ -1532,16 +1626,17 @@ physicsWorld.addBody(heightfieldBody);
 // casual arcade kart.
 LANDMARKS.forEach((l) => {
   if (l.kind === "square" || l.kind === "fountain" || l.kind === "bridge") return; // open places: drive through
+  if (TER && TER.waterDist(l.x, l.z) < 10) return; // on an island or a bridge (Bamberg's Rathaus): the road runs through it
   const box = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
   box.addShape(new CANNON.Box(new CANNON.Vec3(9, 6, 9)));
-  box.position.set(l.x, 6, l.z);
+  box.position.set(l.x, terrainHeight(l.x, l.z) + 6, l.z);
   physicsWorld.addBody(box);
 });
 
 const FROM_CITY = new URLSearchParams(location.search).get("from") || "nuernberg";
 const FROM_GATE = (CITY.portals || []).find((p) => p.id === FROM_CITY) || (CITY.portals || [])[0];
-const PLAYER_SPAWN = IS_BAMBERG ? { x: 10, z: 16 } : IS_OVERVIEW && FROM_GATE ? { x: FROM_GATE.x + 20, z: FROM_GATE.z + 22 } : freeSpot(8, 8);
-const KART_SPAWN = IS_BAMBERG ? { x: 13, z: 19 } : IS_OVERVIEW ? { x: PLAYER_SPAWN.x + 3, z: PLAYER_SPAWN.z + 2 } : freeSpot(PLAYER_SPAWN.x + 3, PLAYER_SPAWN.z + 2); // parked within reach of the player (E works from 5 m)
+const PLAYER_SPAWN = IS_BAMBERG && !TER ? { x: 10, z: 16 } : IS_OVERVIEW && FROM_GATE ? { x: FROM_GATE.x + 20, z: FROM_GATE.z + 22 } : freeSpot(8, 8);
+const KART_SPAWN = IS_BAMBERG && !TER ? { x: 13, z: 19 } : IS_OVERVIEW ? { x: PLAYER_SPAWN.x + 3, z: PLAYER_SPAWN.z + 2 } : freeSpot(PLAYER_SPAWN.x + 3, PLAYER_SPAWN.z + 2); // parked within reach of the player (E works from 5 m)
 // Dimensions measured directly from the Kenney kart-oobi glTF's own accessor
 // bounds (see the offline Python bounding-box extraction used while
 // integrating it), not eyeballed -- the physics collider matches the real
@@ -1581,7 +1676,7 @@ function ensureKartAudio() {
   engineOsc.start();
 }
 function updateEngineSound(speedFrac: number, throttleMag: number) {
-  if (!audioCtx || !engineOsc || !engineGain) return;
+  if (!audioCtx || !engineOsc || !engineGain || !Number.isFinite(speedFrac) || !Number.isFinite(throttleMag)) return;
   const now = audioCtx.currentTime;
   engineOsc.frequency.setTargetAtTime(55 + speedFrac * 260, now, 0.06);
   engineGain.gain.setTargetAtTime(0.025 + throttleMag * 0.05 + speedFrac * 0.02, now, 0.08);
@@ -1707,7 +1802,7 @@ rampBody.addShape(new CANNON.Box(new CANNON.Vec3(RAMP_WIDTH / 2, RAMP_THICK / 2,
 // sunk by its own thickness so the low end is flush with the ground: a 0.5 m lip used to stop the kart dead
 rampBody.position.set(rampX, rampBaseY - (RAMP_THICK / 2) * Math.cos(RAMP_ANGLE) + (RAMP_LEN / 2) * Math.sin(RAMP_ANGLE), rampZ);
 rampBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -RAMP_ANGLE);
-const HAS_RAMP = IS_BAMBERG || IS_OVERVIEW; // the dense old towns have no room for it
+const HAS_RAMP = (IS_BAMBERG && !TER) || IS_OVERVIEW; // real Bamberg has a river where the jump ramp stood // the dense old towns have no room for it
 if (HAS_RAMP) physicsWorld.addBody(rampBody);
 const rampMesh = new THREE.Mesh(
   new THREE.BoxGeometry(RAMP_WIDTH, RAMP_THICK, RAMP_LEN),
@@ -1720,6 +1815,7 @@ rampMesh.receiveShadow = true;
 if (HAS_RAMP) scene.add(rampMesh);
 
 let driving = false;
+const lastDry = { x: KART_SPAWN.x, z: KART_SPAWN.z, yaw: 0 };
 let nearKart = false;
 let kartSteer = 0;
 const KART_MAX_STEER = 0.5;
@@ -1730,7 +1826,7 @@ function enterKart() {
   driving = true;
   chassisBody.velocity.setZero();
   chassisBody.angularVelocity.setZero();
-  chassisBody.position.set(player.x, terrainHeight(player.x, player.z) + 1, player.z);
+  chassisBody.position.set(player.x, groundHeight(player.x, player.z) + 1, player.z);
   chassisBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), player.rotY);
   kartSteer = 0;
   kartLookYaw = 0;
@@ -1770,7 +1866,7 @@ type AvatarRig = { group: THREE.Group; mixer: THREE.AnimationMixer; idleAction: 
 // if you only skim translations) works out to ~2.7 units, already close to
 // the old hand-built avatar's ~2.85. An earlier guess of "~1 unit native"
 // was wrong and had this scaling up 2.8x -- nearly 3x too tall.
-const AVATAR_SCALE = 2.85 / 2.7;
+const AVATAR_SCALE = 2.0 / 2.7; // 2 units tall (see TRUCK_SCALE for the shared toy scale)
 function makeAvatar(variantIdx: number): AvatarRig {
   const gltf = characterGltfs[variantIdx]!;
   const group = gltf.scene.clone(true) as THREE.Group;
@@ -1824,6 +1920,7 @@ const solidGrid = new Map<string, Solid[]>();
   }
 })();
 function insideSolid(x: number, z: number, pad = 0.7): boolean {
+  if (TER?.inWater(x, z)) return true;
   const list = solidGrid.get(Math.floor(x / SOLID_CELL) + "," + Math.floor(z / SOLID_CELL));
   if (!list) return false;
   for (const sd of list) {
@@ -2413,12 +2510,12 @@ const camTarget = new THREE.Vector3(0, 4, 0);
 // that angle on its own (doesn't snap back to "behind") while the target
 // keeps following the player every frame regardless of dragging.
 let occFrame = 0;
-let camYaw = 0, camPitch = IS_OVERVIEW ? 0.95 : 0.88, camDist = IS_OVERVIEW ? 110 : 44;
+let camYaw = 0, camPitch = IS_OVERVIEW ? 0.95 : 0.85, camDist = IS_OVERVIEW ? 110 : 34;
 // Karting gets its own chase-camera state -- closer, lower, and yaw-locked
 // behind the vehicle's heading by default (kartLookYaw is only a temporary
 // look-around offset from dragging, and springs back to 0 on release),
 // instead of reusing the walking camera's free-floating orbit.
-let kartLookYaw = 0, kartCamPitch = IS_OVERVIEW ? 0.5 : 0.28, kartCamDist = IS_OVERVIEW ? 26 : 11;
+let kartLookYaw = 0, kartCamPitch = IS_OVERVIEW ? 0.5 : 0.28, kartCamDist = IS_OVERVIEW ? 26 : 15;
 let dragging = false, lastPX = 0, lastPY = 0;
 let downPX = 0, downPY = 0, downAt = 0;
 const canvasEl = renderer.domElement;
@@ -2452,7 +2549,9 @@ function endDrag(e: PointerEvent) {
     const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     moveRaycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
     const hit = new THREE.Vector3();
-    if (moveRaycaster.ray.intersectPlane(groundPlane, hit)) {
+    const tHit = TER ? moveRaycaster.intersectObject(TER.ground, false)[0] : undefined;
+    if (tHit) hit.copy(tHit.point);
+    if (tHit || moveRaycaster.ray.intersectPlane(groundPlane, hit)) {
       moveTarget = { x: Math.max(-HALF, Math.min(HALF, hit.x)), z: Math.max(-HALF, Math.min(HALF, hit.z)) };
     }
   }
@@ -2484,12 +2583,13 @@ let lastT: number | null = null;
 let lastSunSyncAt = 0;
 // ?debug: expose game state for automated play-testing (read-only use)
 if (new URLSearchParams(location.search).has("debug")) {
-  (window as any).__lb = { player, get driving() { return driving; }, get nearKart() { return nearKart; }, kart: () => chassisBody.position, KART_SPAWN, PLAYER_SPAWN, body: chassisBody, vehicle: kartVehicle, world: physicsWorld, hf: heightfieldBody };
+  (window as any).__lb = { player, get driving() { return driving; }, get nearKart() { return nearKart; }, kart: () => chassisBody.position, KART_SPAWN, PLAYER_SPAWN, body: chassisBody, vehicle: kartVehicle, world: physicsWorld, hf: heightfieldBody, ter: TER, walkBy, groundHeight };
 }
 
 function loop(t: number) {
   if (lastT === null) lastT = t;
   const dt = Math.min(0.05, (t - lastT) / 1000);
+  TER?.update(dt);
   lastT = t;
 
   skyUniforms.time.value = t / 1000;
@@ -2549,6 +2649,21 @@ function loop(t: number) {
     kartVehicle.setBrake(braking, WHEEL_BR);
 
     physicsWorld.step(1 / 60, dt, 5);
+    if (![chassisBody.position.x, chassisBody.position.y, chassisBody.position.z].every(Number.isFinite)) { // physics blew up
+      chassisBody.position.set(lastDry.x, groundHeight(lastDry.x, lastDry.z) + 1, lastDry.z);
+      chassisBody.velocity.setZero(); chassisBody.angularVelocity.setZero(); chassisBody.quaternion.set(0, 0, 0, 1);
+    }
+    if (TER) {
+      const cx = chassisBody.position.x, cz = chassisBody.position.z, lv = TER.waterLevel(cx, cz);
+      if (!isNaN(lv) && chassisBody.position.y < lv + 0.1 && TER.deckAt(cx, cz) === null) { // splash: back to the bank
+        chassisBody.position.set(lastDry.x, groundHeight(lastDry.x, lastDry.z) + 1, lastDry.z);
+        chassisBody.velocity.setZero(); chassisBody.angularVelocity.setZero();
+        chassisBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), lastDry.yaw);
+      } else if (isNaN(lv) && kartVehicle.numWheelsOnGround >= 3) {
+        const e = new CANNON.Vec3(); chassisBody.quaternion.toEuler(e);
+        lastDry.x = cx; lastDry.z = cz; lastDry.yaw = e.y;
+      }
+    }
 
     kartGroup.position.set(chassisBody.position.x, chassisBody.position.y - WHEEL_MOUNT, chassisBody.position.z);
     kartGroup.quaternion.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
@@ -2644,7 +2759,7 @@ function loop(t: number) {
     }
     player.walkAmount += ((didMove ? 1 : 0) - player.walkAmount) * Math.min(1, dt * 8);
     animateWalk(player.rig!, dt, player.walkAmount);
-    const groundY = terrainHeight(player.x, player.z);
+    const groundY = groundHeight(player.x, player.z);
     player.mesh!.position.set(player.x, groundY, player.z);
     player.mesh!.rotation.y = player.rotY;
 
@@ -2667,6 +2782,7 @@ function loop(t: number) {
     checkCollisions();
   }
 
+  if (TER) camPos.y = Math.max(camPos.y, terrainHeight(camPos.x, camPos.z) + 2.5);
   camera.position.copy(camPos);
   camera.lookAt(camTarget);
   followShadow(camTarget.x, camTarget.z);
@@ -2681,18 +2797,18 @@ function loop(t: number) {
     const movedDist = Math.hypot(p.x - prevX, p.z - prevZ);
     p.walkAmount += ((movedDist > 0.01 ? 1 : 0) - p.walkAmount) * Math.min(1, dt * 8);
     animateWalk(p.rig, dt, p.walkAmount);
-    const y = terrainHeight(p.x, p.z);
+    const y = groundHeight(p.x, p.z);
     p.mesh.position.set(p.x, y, p.z);
     const rd = ((p.target.rotY - p.rotY + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     p.rotY += rd * Math.min(1, dt * 6);
     p.mesh.rotation.y = p.rotY;
     p.nameEl.textContent = p.target.name || "?";
-    updateLabel(p.nameEl, new THREE.Vector3(p.x, y + 3.6, p.z));
+    updateLabel(p.nameEl, new THREE.Vector3(p.x, y + 2.8, p.z));
   });
 
   if (joined) {
     myNameEl.textContent = state.name;
-    updateLabel(myNameEl, new THREE.Vector3(player.x, terrainHeight(player.x, player.z) + 3.6, player.z));
+    updateLabel(myNameEl, new THREE.Vector3(player.x, groundHeight(player.x, player.z) + 2.8, player.z));
   } else {
     myNameEl.style.display = "none";
   }

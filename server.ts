@@ -63,6 +63,11 @@ const server = Bun.serve<{ id: string }>({
   async fetch(req, server) {
     const url = new URL(req.url);
 
+    const terrain = url.pathname.match(/^\/terrain\/([a-z]+)\.json$/); // real ground, water and bridges per city
+    if (terrain) {
+      const f = Bun.file(join(import.meta.dir, "public", "terrain", terrain[1] + ".json"));
+      return (await f.exists()) ? new Response(f, { headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" } }) : new Response("Not found", { status: 404 });
+    }
     if (url.pathname === "/ws") {
       const id = crypto.randomUUID();
       const upgraded = server.upgrade(req, { data: { id } });

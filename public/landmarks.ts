@@ -51,11 +51,11 @@ function baroqueTower(w: number, h: number, color: string, cap: "onion" | "haube
 }
 /** Simple pastel house with gable roof and windows -- used in rows (Klein Venedig, Fuggerei, Rothenburg). */
 export function toyHouse(w: number, d: number, floors: number, wall: string, roof: string, timber = false): THREE.Group {
-  const h = floors * 2.1;
+  const h = floors * 2.6; // door 2.4 > a 2-unit person
   const body = timber ? timberBox(w, h, d, wall) : rbox(w, h, d, wall, 0.14);
   const g = G(body, at(gable(w, d, Math.min(3.2, d * 0.55), roof), 0, h, 0));
   g.add(windowRows(w * 0.82, 0.6, h - 0.2, floors, Math.max(1, Math.round(w / 1.8)), d / 2 + 0.01));
-  g.add(at(door(0.8, 1.5), w * 0.22, 0, d / 2 + 0.01));
+  g.add(at(door(1.3, 2.4), w * 0.22, 0, d / 2 + 0.01));
   return g;
 }
 function market(n: number, spread: number, roof: string): THREE.Group {
@@ -505,7 +505,8 @@ const erlangen: Record<string, Builder> = {
 const augsburg: Record<string, Builder> = {
   rathaus: (w, d) => { // white renaissance town hall, gable with the golden imperial eagle, two onion towers
     const L = clamp(Math.max(w, d), 22, 34), D = clamp(Math.min(w, d), 14, 20);
-    const g = G(rbox(L, 20, D, C.white), windowRows(L * 0.86, 1, 19.4, 6, 9, D / 2 + 0.02));
+    const g = G(rbox(L, 20, D, C.white), windowsAround(L, D, 1, 19.4, 6, 3.2, "rect")); // windows on every side, like the real one
+    for (const y of [6.4, 13]) g.add(at(box(L + 0.3, 0.45, D + 0.3, "#e3d3b0"), 0, y, 0)); // stone floor bands
     g.add(at(hip(L, D, 3, C.slate), 0, 20, 0));
     const ped = new THREE.Shape([new THREE.Vector2(-L * 0.28, 0), new THREE.Vector2(L * 0.28, 0), new THREE.Vector2(0, 7)]);
     g.add(at(new THREE.Mesh(new THREE.ExtrudeGeometry(ped, { depth: 1, bevelEnabled: false }), mat(C.white)), 0, 20, D / 2 - 1));
