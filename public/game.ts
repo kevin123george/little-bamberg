@@ -136,20 +136,30 @@ function pointInPoly(x: number, z: number, f: Footprint): boolean {
   }
   return inside;
 }
-function freeSpot(x0: number, z0: number): { x: number; z: number } {
+/** Beside p (4.5 away, the first clear direction): close enough for E, not on top of the person. */
+function kartSpotNear(p: { x: number; z: number }): { x: number; z: number } {
+  const polys: Footprint[] = [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
+  for (let a = 0; a < 16; a++) {
+    const x = p.x + Math.cos((a / 16) * Math.PI * 2) * 4.5, z = p.z + Math.sin((a / 16) * Math.PI * 2) * 4.5;
+    if (waterDist(x, z) >= 3 && !polys.some((f) => pointInPoly(x, z, f) || pointInPoly(x + 2, z, f) || pointInPoly(x - 2, z, f) || pointInPoly(x, z + 2, f) || pointInPoly(x, z - 2, f))) return { x, z };
+  }
+  return freeSpot(p.x + 4.5, p.z + 1, p);
+}
+function freeSpot(x0: number, z0: number, avoid?: { x: number; z: number }): { x: number; z: number } {
+  const far = (x: number, z: number) => !avoid || Math.hypot(x - avoid.x, z - avoid.z) >= 3.5; // e.g. the truck: not on the player
   // prefer a point on a real street near (x0, z0): courtyards are "free" too, but you can't see or leave them
   const polysAll: Footprint[] = [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
   const clear = (x: number, z: number) => waterDist(x, z) >= 4 &&
     !polysAll.some((f) => pointInPoly(x, z, f) || pointInPoly(x + 3, z, f) || pointInPoly(x - 3, z, f) || pointInPoly(x, z + 3, f) || pointInPoly(x, z - 3, f));
   const roadPts = MAP.roads.flatMap((r) => r.line).map((p) => ({ x: p[0]!, z: p[1]!, d: Math.hypot(p[0]! - x0, p[1]! - z0) }))
     .filter((p) => p.d < 120).sort((a, b) => a.d - b.d);
-  for (const p of roadPts) if (clear(p.x, p.z)) return { x: p.x, z: p.z };
+  for (const p of roadPts) if (clear(p.x, p.z) && far(p.x, p.z)) return { x: p.x, z: p.z };
   const polys: Footprint[] = [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
   for (let r = 0; r < 160; r += 2) {
     for (let a = 0; a < 16; a++) {
       const x = x0 + Math.cos((a / 16) * Math.PI * 2) * r, z = z0 + Math.sin((a / 16) * Math.PI * 2) * r;
       if (waterDist(x, z) < 4) continue;
-      if (!polys.some((f) => pointInPoly(x, z, f) || pointInPoly(x + 3, z, f) || pointInPoly(x - 3, z, f) || pointInPoly(x, z + 3, f) || pointInPoly(x, z - 3, f))) return { x, z };
+      if (far(x, z) && !polys.some((f) => pointInPoly(x, z, f) || pointInPoly(x + 3, z, f) || pointInPoly(x - 3, z, f) || pointInPoly(x, z + 3, f) || pointInPoly(x, z - 3, f))) return { x, z };
     }
   }
   return { x: x0, z: z0 };
@@ -1636,7 +1646,7 @@ LANDMARKS.forEach((l) => {
 const FROM_CITY = new URLSearchParams(location.search).get("from") || "nuernberg";
 const FROM_GATE = (CITY.portals || []).find((p) => p.id === FROM_CITY) || (CITY.portals || [])[0];
 const PLAYER_SPAWN = IS_BAMBERG && !TER ? { x: 10, z: 16 } : IS_OVERVIEW && FROM_GATE ? { x: FROM_GATE.x + 20, z: FROM_GATE.z + 22 } : freeSpot(8, 8);
-const KART_SPAWN = IS_BAMBERG && !TER ? { x: 13, z: 19 } : IS_OVERVIEW ? { x: PLAYER_SPAWN.x + 3, z: PLAYER_SPAWN.z + 2 } : freeSpot(PLAYER_SPAWN.x + 3, PLAYER_SPAWN.z + 2); // parked within reach of the player (E works from 5 m)
+const KART_SPAWN = IS_BAMBERG && !TER ? { x: 13, z: 19 } : IS_OVERVIEW ? { x: PLAYER_SPAWN.x + 3, z: PLAYER_SPAWN.z + 2 } : kartSpotNear(PLAYER_SPAWN); // parked beside the player, within reach (E works from 6)
 // Dimensions measured directly from the Kenney kart-oobi glTF's own accessor
 // bounds (see the offline Python bounding-box extraction used while
 // integrating it), not eyeballed -- the physics collider matches the real
@@ -2511,6 +2521,11 @@ const camTarget = new THREE.Vector3(0, 4, 0);
 // keeps following the player every frame regardless of dragging.
 let occFrame = 0;
 let camYaw = 0, camPitch = IS_OVERVIEW ? 0.95 : 0.85, camDist = IS_OVERVIEW ? 110 : 34;
+// A mobile-game camera: always looking down on the town (never skimming the grass), zoom within a range that keeps the
+// person readable. Pinch zooms on phones.
+const CAM_PITCH_MIN = IS_OVERVIEW ? 0.5 : 0.55, CAM_PITCH_MAX = 1.25;
+const CAM_DIST_MIN = IS_OVERVIEW ? 30 : 16, CAM_DIST_MAX = IS_OVERVIEW ? 220 : 60;
+let camGroundY = NaN; // the ground height the camera follows, smoothed so steps onto bridges and terraces don't jolt it
 // Karting gets its own chase-camera state -- closer, lower, and yaw-locked
 // behind the vehicle's heading by default (kartLookYaw is only a temporary
 // look-around offset from dragging, and springs back to 0 on release),
@@ -2520,30 +2535,48 @@ let dragging = false, lastPX = 0, lastPY = 0;
 let downPX = 0, downPY = 0, downAt = 0;
 const canvasEl = renderer.domElement;
 canvasEl.style.touchAction = "none";
+const touchPts = new Map<number, { x: number; y: number }>();
+let pinchDist = 0, pinched = false;
 canvasEl.addEventListener("pointerdown", (e) => {
   if (!joined) return;
+  touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touchPts.size === 2) { const [a, b] = [...touchPts.values()]; pinchDist = Math.hypot(a!.x - b!.x, a!.y - b!.y); pinched = true; }
   dragging = true; lastPX = e.clientX; lastPY = e.clientY;
   downPX = e.clientX; downPY = e.clientY; downAt = performance.now();
   canvasEl.setPointerCapture(e.pointerId);
 });
 canvasEl.addEventListener("pointermove", (e) => {
+  if (touchPts.has(e.pointerId)) touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touchPts.size === 2) {
+    const [a, b] = [...touchPts.values()], d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+    if (pinchDist > 0) {
+      const f = pinchDist / Math.max(1, d);
+      if (driving) kartCamDist = Math.max(6, Math.min(IS_OVERVIEW ? 60 : 24, kartCamDist * f));
+      else camDist = Math.max(CAM_DIST_MIN, Math.min(CAM_DIST_MAX, camDist * f));
+    }
+    pinchDist = d; lastPX = e.clientX; lastPY = e.clientY;
+    return;
+  }
   if (!dragging) return;
   const dx = e.clientX - lastPX, dy = e.clientY - lastPY;
   lastPX = e.clientX; lastPY = e.clientY;
   if (driving) {
     kartLookYaw -= dx * 0.006;
-    kartCamPitch = Math.max(0.05, Math.min(0.9, kartCamPitch + dy * 0.006));
+    kartCamPitch = Math.max(0.15, Math.min(0.9, kartCamPitch + dy * 0.006));
   } else {
     camYaw -= dx * 0.006;
-    camPitch = Math.max(0.18, Math.min(1.35, camPitch + dy * 0.006));
+    camPitch = Math.max(CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX, camPitch + dy * 0.006));
   }
 });
 function endDrag(e: PointerEvent) {
   // A short, near-stationary press+release is a click, not a camera drag --
   // treat it as "walk here": raycast the click through the camera onto the
   // ground plane and let the loop steer the player toward that world point.
+  touchPts.delete(e.pointerId);
+  if (touchPts.size > 0) { pinchDist = 0; return; } // one finger of a pinch lifted: wait for the other
+  const wasPinch = pinched; pinched = false; pinchDist = 0;
   const movedPx = Math.hypot(e.clientX - downPX, e.clientY - downPY);
-  if (dragging && joined && movedPx < 6 && performance.now() - downAt < 350) {
+  if (dragging && joined && !wasPinch && movedPx < 6 && performance.now() - downAt < 350) {
     const rect = canvasEl.getBoundingClientRect();
     const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -2564,7 +2597,7 @@ canvasEl.addEventListener("wheel", (e) => {
   if (!joined) return;
   e.preventDefault();
   if (driving) kartCamDist = Math.max(6, Math.min(IS_OVERVIEW ? 60 : 24, kartCamDist + e.deltaY * 0.03));
-  else camDist = Math.max(14, Math.min(IS_OVERVIEW ? 220 : 70, camDist + e.deltaY * 0.05));
+  else camDist = Math.max(CAM_DIST_MIN, Math.min(CAM_DIST_MAX, camDist + e.deltaY * 0.05));
 }, { passive: false });
 
 function updateLabel(el: HTMLDivElement, worldPos: THREE.Vector3) {
@@ -2763,18 +2796,20 @@ function loop(t: number) {
     player.mesh!.position.set(player.x, groundY, player.z);
     player.mesh!.rotation.y = player.rotY;
 
+    const dist = camDist * Math.sqrt(Math.max(1, 1 / camera.aspect)); // phone held upright: step back so the view isn't a slit
     const orbitOffset = new THREE.Vector3(
-      Math.sin(camYaw) * Math.cos(camPitch) * camDist,
-      Math.sin(camPitch) * camDist,
-      Math.cos(camYaw) * Math.cos(camPitch) * camDist
+      Math.sin(camYaw) * Math.cos(camPitch) * dist,
+      Math.sin(camPitch) * dist,
+      Math.cos(camYaw) * Math.cos(camPitch) * dist
     );
-    const desiredCam = new THREE.Vector3(player.x + orbitOffset.x, groundY + 3 + orbitOffset.y, player.z + orbitOffset.z);
+    camGroundY = isNaN(camGroundY) ? groundY : camGroundY + (groundY - camGroundY) * Math.min(1, dt * 4);
+    const desiredCam = new THREE.Vector3(player.x + orbitOffset.x, camGroundY + 1.2 + orbitOffset.y, player.z + orbitOffset.z);
     camPos.lerp(desiredCam, dragging ? 1 : Math.min(1, dt * 8));
-    camTarget.lerp(new THREE.Vector3(player.x, groundY + 3, player.z), Math.min(1, dt * 6));
+    camTarget.lerp(new THREE.Vector3(player.x, camGroundY + 1.2, player.z), Math.min(1, dt * 6));
     if (camera.fov !== 52) { camera.fov = 52; camera.updateProjectionMatrix(); } // undo the kart's speed-FOV widening
 
     const distToKart = Math.hypot(player.x - kartGroup.position.x, player.z - kartGroup.position.z);
-    nearKart = distToKart < 5;
+    nearKart = distToKart < 6; // the truck is ~3.6 long: measured from its middle
     carPromptEl.textContent = tr("carPrompt");
     carPromptEl.classList.toggle("show", nearKart);
 
