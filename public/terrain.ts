@@ -35,6 +35,19 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
   };
   const hg = new Float32Array(N * N);
   for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) hg[idx(ix, iz)] = demAt(-half + ix * FINE, -half + iz * FINE);
+  // Smooth away narrow man-made ridges and cuts (railway embankments, sunken roads: 10-15 m wide, and the game draws
+  // no railways, so they read as odd dark bands) while hills and river valleys, hundreds of metres across, stay.
+  const tmpH = new Float32Array(N * N);
+  for (let pass = 0; pass < 3; pass++) {
+    for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) { // 5 taps along x (10 units)
+      let sum = 0; for (let k = -2; k <= 2; k++) sum += hg[idx(Math.max(0, Math.min(N - 1, ix + k)), iz)]!;
+      tmpH[idx(ix, iz)] = sum / 5;
+    }
+    for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) { // then along z
+      let sum = 0; for (let k = -2; k <= 2; k++) sum += tmpH[idx(ix, Math.max(0, Math.min(N - 1, iz + k)))]!;
+      hg[idx(ix, iz)] = sum / 5;
+    }
+  }
 
   // ---- water: which cells are wet (and at what level), and how far dry cells are from the water
   const wl = new Float32Array(N * N).fill(NaN);
@@ -112,7 +125,7 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
     const slope = Math.hypot(sx, sz);
     if (!isNaN(wl[k]!)) tmp.copy(cBed);
     else if (wd[k]! < 1.6) tmp.copy(cSand);
-    else tmp.copy(cGrass).lerp(cGrassDark, Math.min(1, slope * 1.4)).lerp(cRock, Math.max(0, Math.min(1, (slope - 1.1) * 1.5)));
+    else tmp.copy(cGrass).lerp(cGrassDark, Math.min(0.6, slope * 0.7)).lerp(cRock, Math.max(0, Math.min(1, (slope - 1.1) * 1.5)));
     const j = 1 + (Math.sin(x * 12.9898 + z * 78.233) * 43758.5453 % 1) * 0.035; // a little per-vertex variation
     col.set([tmp.r * j, tmp.g * j, tmp.b * j], k * 3);
   }

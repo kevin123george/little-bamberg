@@ -1067,7 +1067,8 @@ function placeModel(model: THREE.Object3D, x: number, z: number, o: { angle: num
   if (!o) yaw = Math.atan2(tx / tl2, tz / tl2);
   else if (Math.sin(yaw) * tx + Math.cos(yaw) * tz < 0) yaw += Math.PI;
   model.rotation.y = yaw;
-  const { lo, hi } = groundSpan(x, z, size.x / 2, size.z / 2, yaw);
+  const { lo, hi: top } = groundSpan(x, z, size.x / 2, size.z / 2, yaw);
+  const hi = top - lo > 2 ? lo + (top - lo) * 0.45 : top; // on a steep rock (Kaiserburg) the uphill side goes into the hill
   model.position.set(x, hi, z);
   if (hi - lo > 0.25) { // a sandstone terrace under the downhill side, so nothing floats
     const pl = rbox(size.x + 1.2, hi - lo + 1, size.z + 1.2, "#d7c29a", 0.3);
@@ -1273,10 +1274,15 @@ const occluders: THREE.Object3D[] = []; // every building group, for the see-thr
 let fadedNow = new Set<THREE.Object3D>();
 LANDMARKS.forEach((l) => { if (l.mesh) occluders.push(l.mesh); });
 function setFade(g: THREE.Object3D, faded: boolean) {
+  // materials are shared (toykit caches them per colour), so swap in this object's own see-through copy instead of
+  // editing the shared one -- that used to fade every roof of the same colour in town
   g.traverse((o) => {
-    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-    if (!m || Array.isArray(m)) return;
-    m.transparent = faded; m.opacity = faded ? 0.28 : 1; m.depthWrite = !faded; m.needsUpdate = true;
+    const mesh = o as THREE.Mesh, ud = mesh.userData;
+    if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+    if (faded) {
+      if (!ud.fadeMat) { const f = (mesh.material as THREE.Material).clone(); f.transparent = true; f.opacity = 0.28; f.depthWrite = false; ud.fadeMat = f; ud.solidMat = mesh.material; }
+      mesh.material = ud.fadeMat;
+    } else if (ud.solidMat) mesh.material = ud.solidMat;
   });
 }
 const occRay = new THREE.Raycaster();
@@ -1303,9 +1309,14 @@ function scatterHouses() {
   const lmR = LANDMARKS.map((l) => { const fp = MAP.landmarks[l.id]?.footprint as Footprint | undefined; const o = fp && fp.length >= 3 ? obb(fp) : null; return { x: l.x, z: l.z, r: o ? Math.hypot(o.w, o.d) / 2 + 7 : 16 }; });
   const cand = MAP.scatter_buildings.map((b) => obb(b.footprint as Footprint))
     .filter((o) => !lmR.some((l) => Math.hypot(l.x - o.cx, l.z - o.cz) < l.r) && waterDist(o.cx, o.cz) > 3);
-  const limit = IS_OVERVIEW ? cand.length : 130;
+  const limit = IS_OVERVIEW ? cand.length : 300;
   cand.sort((a, b) => Math.hypot(a.cx, a.cz) - Math.hypot(b.cx, b.cz));
-  const all = new THREE.Group();
+  const blocks = new Map<string, THREE.Group>();
+  const blockOf = (x: number, z: number) => {
+    const k = Math.floor(x / 36) + "," + Math.floor(z / 36);
+    if (!blocks.has(k)) blocks.set(k, new THREE.Group());
+    return blocks.get(k)!;
+  };
   // keep a gap between houses: no roof piles, room to walk and drive between them
   const placed: { x: number; z: number; r: number }[] = [];
   const picked: { o: ReturnType<typeof obb>; w: number; d: number }[] = [];
@@ -1313,7 +1324,8 @@ function scatterHouses() {
     if (picked.length >= limit) break;
     const w = IS_OVERVIEW ? o.w * 0.8 : Math.min(11, Math.max(4.5, o.w * 0.85)), d = IS_OVERVIEW ? o.d * 0.8 : Math.min(8, Math.max(4, o.d * 0.85));
     const r = Math.hypot(w, d) / 2;
-    if (placed.some((p) => Math.hypot(p.x - o.cx, p.z - o.cz) < p.r + r + (IS_OVERVIEW ? 0.5 : 2.5))) continue;
+    const gap = IS_OVERVIEW ? 0.5 : 2.5 + Math.max(0, Math.hypot(o.cx, o.cz) - 110) / 22; // the old town dense, the outskirts airy
+    if (placed.some((p) => Math.hypot(p.x - o.cx, p.z - o.cz) < p.r + r + gap)) continue;
     placed.push({ x: o.cx, z: o.cz, r }); picked.push({ o, w, d });
   }
   picked.forEach(({ o, w, d }, i) => {
@@ -1321,12 +1333,13 @@ function scatterHouses() {
     h.rotation.y = -o.angle + (i % 2 ? Math.PI : 0);
     const sp = groundSpan(o.cx, o.cz, w / 2, d / 2, h.rotation.y);
     h.position.set(o.cx, sp.hi, o.cz);
-    all.add(h);
-    if (sp.hi - sp.lo > 0.2) { const pl = rbox(w + 0.5, sp.hi - sp.lo + 0.8, d + 0.5, "#cdb48a", 0.2); pl.position.set(o.cx, sp.lo - 0.8, o.cz); pl.rotation.y = h.rotation.y; all.add(pl); }
+    const blk = blockOf(o.cx, o.cz);
+    blk.add(h);
+    if (sp.hi - sp.lo > 0.2) { const pl = rbox(w + 0.5, sp.hi - sp.lo + 0.8, d + 0.5, "#cdb48a", 0.2); pl.position.set(o.cx, sp.lo - 0.8, o.cz); pl.rotation.y = h.rotation.y; blk.add(pl); }
     const c = Math.cos(o.angle), sn = Math.sin(o.angle);
     HOUSE_RECTS.push([[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([u, v]) => [o.cx + u! * c - v! * sn, o.cz + u! * sn + v! * c]));
   });
-  scene.add(bake(all));
+  for (const blk of blocks.values()) { const b = bake(blk); scene.add(b); if (!IS_OVERVIEW) occluders.push(b); }
 }
 scatterHouses();
 
@@ -1379,6 +1392,25 @@ for (let t3 = 0, placed = 0; TER && t3 < 2000 && placed < 90; t3++) { // woods a
   const hh = terrainHeight(tx, tz), rel = (hh - TER.minH) / Math.max(1, TER.maxH - TER.minH);
   if (rel < 0.35 || waterDist(tx, tz) < 3 || treeBlocked(tx, tz) || insideHouse(tx, tz)) continue;
   addTree(tx, tz); placed++;
+}
+{ // toy-town parks: clumps of round trees in the open grass, clear of streets, houses, sights and water
+  const segs: number[][] = [];
+  for (const r of TER ? MAP.roads : []) for (let i = 0; i < r.line.length - 1; i++) segs.push([r.line[i]![0]!, r.line[i]![1]!, r.line[i + 1]![0]!, r.line[i + 1]![1]!, r.width / 2 + 2]);
+  const nearRoad = (x: number, z: number) => segs.some(([ax, az, bx, bz, hw]) => {
+    if (Math.min(ax!, bx!) - 8 > x || Math.max(ax!, bx!) + 8 < x || Math.min(az!, bz!) - 8 > z || Math.max(az!, bz!) + 8 < z) return false;
+    const ex = bx! - ax!, ez = bz! - az!, L = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((x - ax!) * ex + (z - az!) * ez) / L));
+    return Math.hypot(x - ax! - t * ex, z - az! - t * ez) < hw!;
+  });
+  const nearSight = (x: number, z: number) => LANDMARKS.some((l) => Math.hypot(l.x - x, l.z - z) < 20);
+  for (let c = 0, made = 0; TER && c < 400 && made < 45; c++) {
+    const cx = (Math.random() - 0.5) * HALF * 1.9, cz = (Math.random() - 0.5) * HALF * 1.9;
+    if (nearRoad(cx, cz) || waterDist(cx, cz) < 4 || insideHouse(cx, cz) || nearSight(cx, cz)) continue;
+    made++;
+    for (let k = 0; k < 5; k++) {
+      const tx = cx + (Math.random() - 0.5) * 16, tz = cz + (Math.random() - 0.5) * 16;
+      if (!nearRoad(tx, tz) && waterDist(tx, tz) >= 3 && !insideHouse(tx, tz) && !treeBlocked(tx, tz)) addTree(tx, tz, 0.8 + Math.random() * 0.5);
+    }
+  }
 }
 for (let t2 = 0; t2 < (IS_BAMBERG && !TER ? 14 : 0); t2++) {
   const tx2 = (Math.random() - 0.5) * HALF * 1.6, tz2 = (Math.random() - 0.5) * HALF * 1.6;
@@ -1548,8 +1580,7 @@ function makeBalloon(envelopeColor: string, stripeColor: string): THREE.Group {
     new THREE.MeshStandardMaterial({ color: envelopeColor, flatShading: true, roughness: 0.85, metalness: 0 })
   );
   envelope.scale.set(1, 1.25, 1);
-  envelope.position.y = 8;
-  envelope.castShadow = true;
+  envelope.position.y = 8; // no castShadow: in the low sun their shadows lay as big dark smears across the grass
   const stripe = new THREE.Mesh(
     new THREE.SphereGeometry(6.05, 12, 10, 0, Math.PI * 0.55),
     new THREE.MeshStandardMaterial({ color: stripeColor, flatShading: true, roughness: 0.85, metalness: 0 })
@@ -1561,7 +1592,6 @@ function makeBalloon(envelopeColor: string, stripeColor: string): THREE.Group {
     new THREE.MeshStandardMaterial({ color: cssVar("--timber"), roughness: 1, metalness: 0 })
   );
   basket.position.y = -1;
-  basket.castShadow = true;
   g.add(envelope, stripe, basket);
   return g;
 }
@@ -1674,23 +1704,39 @@ chassisBody.angularDamping = 0.4;
 let audioCtx: AudioContext | null = null;
 let engineOsc: OscillatorNode | null = null;
 let engineGain: GainNode | null = null;
+// A soft toy-car hum (the raw sawtooth buzzed and never stopped): two gentle triangle tones a fifth apart, muffled by a
+// low-pass filter that opens a little with speed, nearly silent when standing. The 🔊 button mutes all game sound.
+let engineOsc2: OscillatorNode | null = null, engineFilter: BiquadFilterNode | null = null, masterGain: GainNode | null = null;
+let soundOn = (() => { try { return localStorage.getItem("littleBamberg.sound") !== "off"; } catch (e) { return true; } })();
 function ensureKartAudio() {
   if (audioCtx) return;
   audioCtx = new AudioContext();
-  engineOsc = audioCtx.createOscillator();
-  engineOsc.type = "sawtooth";
-  engineOsc.frequency.value = 55;
-  engineGain = audioCtx.createGain();
-  engineGain.gain.value = 0;
-  engineOsc.connect(engineGain).connect(audioCtx.destination);
-  engineOsc.start();
+  masterGain = audioCtx.createGain(); masterGain.gain.value = soundOn ? 1 : 0; masterGain.connect(audioCtx.destination);
+  engineFilter = audioCtx.createBiquadFilter(); engineFilter.type = "lowpass"; engineFilter.frequency.value = 280; engineFilter.Q.value = 0.5;
+  engineGain = audioCtx.createGain(); engineGain.gain.value = 0;
+  engineOsc = audioCtx.createOscillator(); engineOsc.type = "triangle"; engineOsc.frequency.value = 70;
+  engineOsc2 = audioCtx.createOscillator(); engineOsc2.type = "triangle"; engineOsc2.frequency.value = 105;
+  const g2 = audioCtx.createGain(); g2.gain.value = 0.45;
+  engineOsc.connect(engineFilter); engineOsc2.connect(g2).connect(engineFilter);
+  engineFilter.connect(engineGain).connect(masterGain);
+  engineOsc.start(); engineOsc2.start();
 }
 function updateEngineSound(speedFrac: number, throttleMag: number) {
   if (!audioCtx || !engineOsc || !engineGain || !Number.isFinite(speedFrac) || !Number.isFinite(throttleMag)) return;
-  const now = audioCtx.currentTime;
-  engineOsc.frequency.setTargetAtTime(55 + speedFrac * 260, now, 0.06);
-  engineGain.gain.setTargetAtTime(0.025 + throttleMag * 0.05 + speedFrac * 0.02, now, 0.08);
+  const now = audioCtx.currentTime, f = 70 + speedFrac * 95;
+  engineOsc.frequency.setTargetAtTime(f, now, 0.15);
+  engineOsc2?.frequency.setTargetAtTime(f * 1.5, now, 0.15);
+  engineFilter?.frequency.setTargetAtTime(260 + speedFrac * 420, now, 0.2);
+  engineGain.gain.setTargetAtTime(speedFrac < 0.02 && throttleMag === 0 ? 0.004 : 0.012 + throttleMag * 0.014 + speedFrac * 0.012, now, 0.2);
 }
+function setSound(on: boolean) {
+  soundOn = on;
+  try { localStorage.setItem("littleBamberg.sound", on ? "on" : "off"); } catch (e) {}
+  const b = document.getElementById("soundToggle"); if (b) b.textContent = on ? "🔊" : "🔇";
+  if (audioCtx && masterGain) masterGain.gain.setTargetAtTime(on ? 1 : 0, audioCtx.currentTime, 0.05);
+}
+document.getElementById("soundToggle")?.addEventListener("click", () => setSound(!soundOn));
+setSound(soundOn);
 function silenceEngineSound() {
   if (!audioCtx || !engineGain) return;
   engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15);
@@ -1699,11 +1745,11 @@ function playHorn() {
   if (!audioCtx) return;
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-  osc.type = "square"; osc.frequency.value = 340;
+  osc.type = "triangle"; osc.frequency.value = 520; // a little "beep beep", not a square-wave blare
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-  osc.connect(gain).connect(audioCtx.destination);
+  gain.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+  osc.connect(gain).connect(masterGain ?? audioCtx.destination);
   osc.start(now); osc.stop(now + 0.4);
 }
 function playThud(strength: number) {
@@ -2616,7 +2662,7 @@ let lastT: number | null = null;
 let lastSunSyncAt = 0;
 // ?debug: expose game state for automated play-testing (read-only use)
 if (new URLSearchParams(location.search).has("debug")) {
-  (window as any).__lb = { player, get driving() { return driving; }, get nearKart() { return nearKart; }, kart: () => chassisBody.position, KART_SPAWN, PLAYER_SPAWN, body: chassisBody, vehicle: kartVehicle, world: physicsWorld, hf: heightfieldBody, ter: TER, walkBy, groundHeight };
+  (window as any).__lb = { player, get driving() { return driving; }, get nearKart() { return nearKart; }, kart: () => chassisBody.position, KART_SPAWN, PLAYER_SPAWN, body: chassisBody, vehicle: kartVehicle, world: physicsWorld, hf: heightfieldBody, ter: TER, walkBy, groundHeight, scene, landmarks: LANDMARKS.map((l) => ({ id: l.id, x: l.x, z: l.z })) };
 }
 
 function loop(t: number) {
