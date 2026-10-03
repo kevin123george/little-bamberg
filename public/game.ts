@@ -11,17 +11,11 @@ import { HorizontalTiltShiftShader } from "three/examples/jsm/shaders/Horizontal
 import { VerticalTiltShiftShader } from "three/examples/jsm/shaders/VerticalTiltShiftShader.js";
 import { HueSaturationShader } from "three/examples/jsm/shaders/HueSaturationShader.js";
 import { LANDMARK_MODELS, neueResidenz, toyHouse } from "./landmarks";
+import { LANDMARK_MODELS_DE } from "./landmarks_de";
 import { bake, nightGlowMaterials, C as TOY, rbox, tower, hip, statue } from "./toykit";
 import { buildTerrain, type TerrainData, type Terrain } from "./terrain";
 import { buildWorld, countryEdgeFn, type WorldData } from "./world";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import bambergData from "./bamberg-map-data.json";
-import muenchenData from "./maps/muenchen.json";
-import nuernbergData from "./maps/nuernberg.json";
-import wuerzburgData from "./maps/wuerzburg.json";
-import regensburgData from "./maps/regensburg.json";
-import erlangenData from "./maps/erlangen.json";
-import augsburgData from "./maps/augsburg.json";
 import bayernData from "./maps/bayern.json";
 import bavariaOutline from "./bavaria.json";
 
@@ -37,14 +31,17 @@ type CityMeta = {
   overview?: boolean; m_per_unit?: number; outline?: number[][]; rivers?: number[][][];
   lakes?: { cx: number; cz: number; rx: number; rz: number }[]; portals?: { id: string; x: number; z: number }[];
 };
-const CITY_MAPS: Record<string, any> = {
-  bamberg: bambergData, muenchen: muenchenData, nuernberg: nuernbergData, wuerzburg: wuerzburgData,
-  regensburg: regensburgData, erlangen: erlangenData, augsburg: augsburgData, bayern: bayernData,
-};
+// one Germany: the world layout, then every city's map (fetched in parallel)
+const WORLD_DATA: WorldData = await fetch("./world/world.json").then((r) => r.json());
+const CITY_MAPS: Record<string, any> = { bayern: bayernData };
+await Promise.all(Object.keys(WORLD_DATA.cities).map(async (id) => {
+  const [m, t] = await Promise.all([fetch(id === "bamberg" ? "./maps/bamberg-map-data.json" : `./maps/${id}.json`), fetch(`./terrain/${id}.json`, { method: "HEAD" })]);
+  if (m.ok && t.ok) CITY_MAPS[id] = await m.json();
+  else delete WORLD_DATA.cities[id]; // not built yet: leave the countryside there
+}));
 const BAMBERG_META: CityMeta = { id: "bamberg", name_en: "Bamberg", name_ml: "ബാംബെർഗ്", latlon: [49.8918, 10.8869], river_half_width: 6, hills: [], landmarks: [] };
 // ---- One Bavaria: every city on one big map (world.ts). ?city=<id> (or the last region you were in) picks where you
 // start; there is no travelling between pages any more -- you walk or drive.
-const WORLD_DATA: WorldData = await fetch("./world/world.json").then((r) => r.json());
 const SPAWN_CITY: string = (() => {
   let id = new URLSearchParams(location.search).get("city") || "";
   if (!WORLD_DATA.cities[id]) { try { id = localStorage.getItem("littleBamberg.city") || ""; } catch (e) {} }
@@ -83,7 +80,7 @@ const mapData = (() => { // every city's map in world coordinates, keys "city:id
     landmarks["bayern:" + l.id] = { center: [p[0]!, p[1]!] };
     metaLms.push({ ...l, id: "bayern:" + l.id, lid: l.id, city: "bayern" });
   }
-  const meta: CityMeta = { id: "world", name_en: "Bavaria", name_ml: "ബവേറിയ", latlon: [48.92, 11.41], river_half_width: 6, hills: [], landmarks: metaLms };
+  const meta: CityMeta = { id: "world", name_en: "Germany", name_ml: "ജർമനി", latlon: [48.92, 11.41], river_half_width: 6, hills: [], landmarks: metaLms };
   return { meta, landmarks, scatter_buildings: scatter, roads, river_polyline: [] as number[][] };
 })();
 const CITY: CityMeta = mapData.meta;
@@ -506,6 +503,7 @@ interface Landmark {
   y?: number;
   mesh?: THREE.Object3D;
   city?: string; lid?: string; // in the one big map: which city, and the id within it
+  top?: number; // model top, for the label
 }
 // x/z below are the real OSM-derived positions (MAP.landmarks[id].center) --
 // see bamberg-map-data.json. Only label/points/flavor are hand-written.
@@ -684,7 +682,7 @@ function applyThemeColors() {
 // procedural clouds. The DirectionalLight below is aimed along the same sun
 // vector so cast shadows agree with where the sky says the sun is.
 const sky = new Sky();
-sky.scale.setScalar(3000);
+sky.scale.setScalar(9000); // follows the camera (see the loop): the world is far bigger than the sky box used to be
 sky.frustumCulled = false; // the box is centered on the world, not the camera -- never cull it
 scene.add(sky);
 const skyUniforms = (sky.material as THREE.ShaderMaterial).uniforms;
@@ -831,9 +829,9 @@ sun.shadow.normalBias = 0.35;
 sun.shadow.radius = 4;
 scene.add(sun);
 scene.add(sun.target);
-function followShadow(x: number, z: number) {
-  sun.target.position.set(x, 0, z);
-  sun.position.set(x + lightDir.x * 200, lightDir.y * 200, z + lightDir.z * 200);
+function followShadow(x: number, z: number, y = 0) {
+  sun.target.position.set(x, y, z);
+  sun.position.set(x + lightDir.x * 200, y + lightDir.y * 200, z + lightDir.z * 200);
 }
 followShadow(0, 0);
 
@@ -1153,7 +1151,7 @@ function decorateBridge(id: string, b: { xs: number[]; zs: number[]; deck: numbe
 }
 function buildToyLandmarks() {
   for (const l of LANDMARKS) {
-    const models = LANDMARK_MODELS[l.city!] || {};
+    const models = LANDMARK_MODELS[l.city!] || LANDMARK_MODELS_DE[l.city!] || {};
     const fp = MAP.landmarks[l.id]?.footprint as Footprint | undefined;
     const o = fp && fp.length >= 3 ? obb(fp) : null;
     const build = models[l.lid!];
@@ -1347,6 +1345,9 @@ function updateOcclusion(from: THREE.Vector3, to: THREE.Vector3) {
 // Filler houses: far fewer than the real town (the sights are the point), as cute toy houses, all merged into a handful
 // of meshes. HOUSE_RECTS are their footprints, for walking collision.
 const HOUSE_RECTS: Footprint[] = [];
+const DETAIL: { obj: THREE.Object3D; x: number; z: number }[] = []; // near-only detail (houses, trees, lamps)
+const FAR_HOUSES: { obj: THREE.Object3D; x: number; z: number; city: string }[] = []; // each city's houses as plain blocks, for the view from afar
+const CITY_HOUSES = new Map<string, THREE.Object3D[]>(); // the real houses, per city
 function scatterHouses() {
   const walls = [TOY.plaster, TOY.rose, TOY.ochre, TOY.sky, TOY.salmon, TOY.mint, TOY.cream, TOY.yellow];
   const roofs = [TOY.roof, TOY.roofDark, "#e27a4e"];
@@ -1359,6 +1360,9 @@ function scatterHouses() {
   cand.sort((a, b) => dc(a) - dc(b));
   const perCity = new Map<string, number>();
   const blocks = new Map<string, THREE.Group>();
+  const farGeos = new Map<string, THREE.BufferGeometry[]>();
+  const blockCity = new Map<string, string>();
+  const DETAIL_PUSH: never[] = []; void DETAIL_PUSH;
   const blockOf = (x: number, z: number) => {
     const k = Math.floor(x / 36) + "," + Math.floor(z / 36);
     if (!blocks.has(k)) blocks.set(k, new THREE.Group());
@@ -1381,12 +1385,34 @@ function scatterHouses() {
     const sp = groundSpan(o.cx, o.cz, w / 2, d / 2, h.rotation.y);
     h.position.set(o.cx, sp.hi, o.cz);
     const blk = blockOf(o.cx, o.cz);
-    blk.add(h);
+    blk.add(h); blockCity.set(Math.floor(o.cx / 36) + "," + Math.floor(o.cz / 36), o.city);
+    { // the far version: a coloured block with a roof, all of a city's in one mesh (see FAR_HOUSES)
+      const hh = (IS_OVERVIEW ? 1 : 2 + (i % 3 === 0 ? 1 : 0)) * 2.6, rot = h.rotation.y;
+      const body = new THREE.BoxGeometry(w, hh, d).translate(0, hh / 2, 0), roof = new THREE.ConeGeometry(Math.max(w, d) * 0.72, 2.6, 4).rotateY(Math.PI / 4).translate(0, hh + 1.3, 0);
+      roof.scale(w / Math.max(w, d), 1, d / Math.max(w, d));
+      for (const [gg, c] of [[body, walls[i % walls.length]!], [roof, roofs[(i * 7) % roofs.length]!]] as const) {
+        const g2 = gg.index ? gg.toNonIndexed() : gg; g2.deleteAttribute("uv");
+        const col = new THREE.Color(c), n = g2.attributes.position!.count, arr = new Float32Array(n * 3);
+        for (let k = 0; k < n; k++) arr.set([col.r, col.g, col.b], k * 3);
+        g2.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+        g2.rotateY(rot).translate(o.cx, sp.hi, o.cz);
+        if (!farGeos.has(o.city)) farGeos.set(o.city, []);
+        farGeos.get(o.city)!.push(g2);
+      }
+    }
     if (sp.hi - sp.lo > 0.2) { const pl = rbox(w + 0.5, sp.hi - sp.lo + 0.8, d + 0.5, "#cdb48a", 0.2); pl.position.set(o.cx, sp.lo - 0.8, o.cz); pl.rotation.y = h.rotation.y; blk.add(pl); }
     const c = Math.cos(o.angle), sn = Math.sin(o.angle);
     HOUSE_RECTS.push([[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([u, v]) => [o.cx + u! * c - v! * sn, o.cz + u! * sn + v! * c]));
   });
-  for (const blk of blocks.values()) { const b = bake(blk); scene.add(b); if (!IS_OVERVIEW) occluders.push(b); }
+  const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
+  for (const [cid, geos] of farGeos) {
+    const m = new THREE.Mesh(mergeGeometries(geos)!, farMat); m.visible = false; scene.add(m);
+    const c = WORLD_DATA.cities[cid]; if (c) FAR_HOUSES.push({ obj: m, x: c.x, z: c.z, city: cid });
+  }
+  for (const [key, blk] of blocks) {
+    const b = bake(blk); scene.add(b); if (!IS_OVERVIEW) occluders.push(b);
+    const bc = blockCity.get(key) || ""; if (!CITY_HOUSES.has(bc)) CITY_HOUSES.set(bc, []); CITY_HOUSES.get(bc)!.push(b); void key;
+  }
 }
 scatterHouses();
 
@@ -1434,8 +1460,8 @@ if (IS_OVERVIEW && CITY.outline) {
     }
   }
 }
-for (const [cid, cw] of Object.entries(WORLD_DATA.cities)) for (let t3 = 0, placed = 0; t3 < 2000 && placed < 90; t3++) { // woods and gardens on the real slopes
-  const ct = CITY_TER[cid]!, tx = cw.x + (Math.random() - 0.5) * HALF * 1.95, tz = cw.z + (Math.random() - 0.5) * HALF * 1.95;
+for (const [cid, cw] of Object.entries(WORLD_DATA.cities)) for (let t3 = 0, placed = 0; t3 < 2000 && placed < 90 * (((cw.half ?? 296) / 296) ** 2); t3++) { // woods and gardens on the real slopes
+  const ch = (cw.half ?? 296) - 6, ct = CITY_TER[cid]!, tx = cw.x + (Math.random() - 0.5) * ch * 1.95, tz = cw.z + (Math.random() - 0.5) * ch * 1.95;
   const hh = terrainHeight(tx, tz) - cw.y, rel = (hh - ct.minH) / Math.max(1, ct.maxH - ct.minH);
   if (rel < 0.35 || waterDist(tx, tz) < 3 || treeBlocked(tx, tz) || insideHouse(tx, tz)) continue;
   addTree(tx, tz); placed++;
@@ -1450,7 +1476,7 @@ for (const [cid, cw] of Object.entries(WORLD_DATA.cities)) for (let t3 = 0, plac
   });
   const nearSight = (x: number, z: number) => LANDMARKS.some((l) => Math.hypot(l.x - x, l.z - z) < 20);
   for (const cw of Object.values(WORLD_DATA.cities)) for (let c = 0, made = 0; c < 400 && made < 45; c++) {
-    const cx = cw.x + (Math.random() - 0.5) * HALF * 1.9, cz = cw.z + (Math.random() - 0.5) * HALF * 1.9;
+    const hh = (cw.half ?? 296) - 6, cx = cw.x + (Math.random() - 0.5) * hh * 1.9, cz = cw.z + (Math.random() - 0.5) * hh * 1.9;
     if (nearRoad(cx, cz) || waterDist(cx, cz) < 4 || insideHouse(cx, cz) || nearSight(cx, cz)) continue;
     made++;
     for (let k = 0; k < 5; k++) {
@@ -1490,6 +1516,16 @@ MAP.roads.forEach((road) => {
   }
 });
 
+// Far-away detail is hidden (see updateDetail): houses, trees and lamps in 600-unit buckets, each with its own meshes.
+const bucketOf = (x: number, z: number) => Math.floor(x / 600) + "," + Math.floor(z / 600);
+function updateDetail(px: number, pz: number) {
+  for (const d of DETAIL) d.obj.visible = Math.hypot(d.x - px, d.z - pz) < 1500;
+  for (const f of FAR_HOUSES) { // one city at a time: its real houses when you're near, plain blocks from afar
+    const near = Math.hypot(f.x - px, f.z - pz) < 1500 + ((WORLD_DATA.cities[f.city]?.half) ?? 296);
+    f.obj.visible = !near;
+    for (const b of CITY_HOUSES.get(f.city) || []) b.visible = near;
+  }
+}
 const trunkMesh = new THREE.InstancedMesh(
   new THREE.CylinderGeometry(0.32, 0.45, 2.4, 6),
   new THREE.MeshStandardMaterial({ color: "#955f41", roughness: 0.9, metalness: 0 }),
@@ -1518,10 +1554,19 @@ treePlacements.forEach((p, i) => {
   crownMesh.setMatrixAt(i, treeMat4);
   crownMesh.setColorAt(i, new THREE.Color(IS_OVERVIEW ? (i % 3 === 0 ? "#427c59" : i % 3 === 1 ? "#4a916d" : "#56a37b") : (i % 3 === 0 ? "#5fbf45" : i % 3 === 1 ? "#77cf55" : "#4fae3f")));
 });
-trunkMesh.instanceMatrix.needsUpdate = true;
-crownMesh.instanceMatrix.needsUpdate = true;
-if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
-scene.add(trunkMesh, crownMesh);
+// split into buckets so far ones can be hidden
+{
+  const buckets = new Map<string, number[]>();
+  treePlacements.forEach((p, i) => { const k = bucketOf(p.x, p.z); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k)!.push(i); });
+  const m4 = new THREE.Matrix4(), col = new THREE.Color();
+  for (const idxs of buckets.values()) {
+    const tr = new THREE.InstancedMesh(trunkMesh.geometry, trunkMesh.material, idxs.length), cr = new THREE.InstancedMesh(crownMesh.geometry, crownMesh.material, idxs.length);
+    idxs.forEach((i, j) => { trunkMesh.getMatrixAt(i, m4); tr.setMatrixAt(j, m4); crownMesh.getMatrixAt(i, m4); cr.setMatrixAt(j, m4); crownMesh.getColorAt(i, col); cr.setColorAt(j, col); });
+    tr.castShadow = cr.castShadow = true; tr.computeBoundingSphere(); cr.computeBoundingSphere();
+    const g = new THREE.Group(); g.add(tr, cr); scene.add(g);
+    const p0 = treePlacements[idxs[0]!]!; DETAIL.push({ obj: g, x: Math.floor(p0.x / 600) * 600 + 300, z: Math.floor(p0.z / 600) * 600 + 300 });
+  }
+}
 
 // ================= Street lamps =================
 // Same road-walking placement technique as the avenue trees above, sparser.
@@ -1564,9 +1609,18 @@ lampPlacements.forEach((p, i) => {
   lampMat4.compose(new THREE.Vector3(p.x, gy + 3.5, p.z), noRot, new THREE.Vector3(1, 1, 1));
   lampBulbMesh.setMatrixAt(i, lampMat4);
 });
-lampPoleMesh.instanceMatrix.needsUpdate = true;
-lampBulbMesh.instanceMatrix.needsUpdate = true;
-scene.add(lampPoleMesh, lampBulbMesh);
+{
+  const buckets = new Map<string, number[]>();
+  lampPlacements.forEach((p, i) => { const k = bucketOf(p.x, p.z); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k)!.push(i); });
+  const m4 = new THREE.Matrix4();
+  for (const idxs of buckets.values()) {
+    const po = new THREE.InstancedMesh(lampPoleMesh.geometry, lampPoleMesh.material, idxs.length), bu = new THREE.InstancedMesh(lampBulbMesh.geometry, lampBulbMat, idxs.length);
+    idxs.forEach((i, j) => { lampPoleMesh.getMatrixAt(i, m4); po.setMatrixAt(j, m4); lampBulbMesh.getMatrixAt(i, m4); bu.setMatrixAt(j, m4); });
+    po.castShadow = true; po.computeBoundingSphere(); bu.computeBoundingSphere();
+    const g = new THREE.Group(); g.add(po, bu); scene.add(g);
+    const p0 = lampPlacements[idxs[0]!]!; DETAIL.push({ obj: g, x: Math.floor(p0.x / 600) * 600 + 300, z: Math.floor(p0.z / 600) * 600 + 300 });
+  }
+}
 function updateStreetLamps() {
   lampBulbMat.emissiveIntensity = nightFactor * 2.2;
 }
@@ -1653,12 +1707,12 @@ BALLOON_COLORS.forEach(([envelopeColor, stripeColor], i) => {
   scene.add(group);
   balloons.push({
     group,
-    baseX: Object.values(WORLD_DATA.cities)[i % 7]!.x + (Math.random() - 0.5) * HALF,
-    baseZ: Object.values(WORLD_DATA.cities)[i % 7]!.z + (Math.random() - 0.5) * HALF,
+    baseX: Object.values(WORLD_DATA.cities)[(i * 3) % Object.keys(WORLD_DATA.cities).length]!.x + (Math.random() - 0.5) * HALF,
+    baseZ: Object.values(WORLD_DATA.cities)[(i * 3) % Object.keys(WORLD_DATA.cities).length]!.z + (Math.random() - 0.5) * HALF,
     radius: 60 + Math.random() * 90,
     speed: 0.03 + Math.random() * 0.02,
     phase: (i / BALLOON_COLORS.length) * Math.PI * 2,
-    height: 75 + i * 16 + Object.values(WORLD_DATA.cities)[i % 7]!.y,
+    height: 75 + i * 16 + Object.values(WORLD_DATA.cities)[(i * 3) % Object.keys(WORLD_DATA.cities).length]!.y,
   });
 });
 
@@ -1686,15 +1740,15 @@ const groundPhysMaterial = new CANNON.Material("ground");
 const HF_SEGMENTS = 290; // 2 units per city: the same grid as the drawn ground, so no hidden kerbs
 let heightfieldBody: CANNON.Body | null = null;
 for (const c of Object.values(WORLD_DATA.cities)) {
-  const e = (HALF * 2) / HF_SEGMENTS, data: number[][] = [];
-  for (let xi = 0; xi <= HF_SEGMENTS; xi++) {
+  const H = (c.half ?? 296) - 6, segs = H, e = (H * 2) / segs, data: number[][] = []; // 2 units per cell
+  for (let xi = 0; xi <= segs; xi++) {
     const col: number[] = [];
-    for (let yi = 0; yi <= HF_SEGMENTS; yi++) col.push(terrainHeight(c.x - HALF + xi * e, c.z + HALF - yi * e));
+    for (let yi = 0; yi <= segs; yi++) col.push(terrainHeight(c.x - H + xi * e, c.z + H - yi * e));
     data.push(col);
   }
   const body = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
   body.addShape(new CANNON.Heightfield(data, { elementSize: e }));
-  body.position.set(c.x - HALF, 0, c.z + HALF);
+  body.position.set(c.x - H, 0, c.z + H);
   body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
   physicsWorld.addBody(body);
   heightfieldBody = heightfieldBody || body;
@@ -2089,7 +2143,8 @@ function updateGuide() {
   const t = new THREE.Vector3(best.x, 0, best.z).applyMatrix4(camera.matrixWorldInverse);
   document.getElementById("guideArrow")!.style.transform = `rotate(${Math.atan2(t.x - a.x, -(t.z - a.z))}rad)`;
   document.getElementById("guideName")!.textContent = tl(best).label + " · +" + best.points;
-  document.getElementById("guideDist")!.textContent = IS_OVERVIEW ? Math.round((bd * (CITY.m_per_unit || 327)) / 1000) + " km" : Math.round(bd) + " m";
+  // in town 1 unit = 2.2 m; between towns the map is squeezed to 20 units per real km: show real distances
+  document.getElementById("guideDist")!.textContent = bd < 450 ? Math.round(bd * 2.2) + " m" : Math.round(bd / 20) + " km";
   el.style.display = "flex";
 }
 
@@ -2787,7 +2842,7 @@ let lastT: number | null = null;
 let lastSunSyncAt = 0;
 // ?debug: expose game state for automated play-testing (read-only use)
 if (new URLSearchParams(location.search).has("debug")) {
-  (window as any).__lb = { player, get driving() { return driving; }, get nearKart() { return nearKart; }, kart: () => chassisBody.position, KART_SPAWN, PLAYER_SPAWN, body: chassisBody, vehicle: kartVehicle, world: physicsWorld, hf: heightfieldBody, ter: TER, walkBy, groundHeight, scene, landmarks: LANDMARKS.map((l) => ({ id: l.id, x: l.x, z: l.z })) };
+  (window as any).__lb = { player, get driving() { return driving; }, get nearKart() { return nearKart; }, kart: () => chassisBody.position, KART_SPAWN, PLAYER_SPAWN, body: chassisBody, vehicle: kartVehicle, world: physicsWorld, hf: heightfieldBody, ter: TER, walkBy, groundHeight, scene, setYaw: (y: number) => { camYaw = y; }, landmarks: LANDMARKS.map((l) => ({ id: l.id, x: l.x, z: l.z })) };
 }
 
 function loop(t: number) {
@@ -2798,6 +2853,7 @@ function loop(t: number) {
     const px = driving ? chassisBody.position.x : player.x, pz = driving ? chassisBody.position.z : player.z;
     streamWorld(px, pz, 1);
     updateRegion(px, pz);
+    updateDetail(px, pz);
   }
   lastT = t;
 
@@ -2983,9 +3039,9 @@ function loop(t: number) {
       camPos.set(player.x, groundY + 1.75, player.z);
       camTarget.set(player.x - Math.sin(camYaw) * Math.cos(camPitch) * 10, groundY + 1.75 - Math.sin(camPitch) * 10, player.z - Math.cos(camYaw) * Math.cos(camPitch) * 10);
     } else if (viewMode === "map") { // the whole town from above
-      camTarget.lerp(new THREE.Vector3(0, 2, 0), Math.min(1, dt * 3));
-      const d = HALF * 2.1;
-      camPos.lerp(new THREE.Vector3(Math.sin(camYaw) * Math.cos(camPitch) * d, Math.sin(camPitch) * d, Math.cos(camYaw) * Math.cos(camPitch) * d), Math.min(1, dt * 3));
+      camTarget.lerp(new THREE.Vector3(player.x, groundY, player.z), Math.min(1, dt * 3));
+      const d = 1600; // the region around you, cities on the horizon
+      camPos.lerp(new THREE.Vector3(player.x + Math.sin(camYaw) * Math.cos(camPitch) * d, groundY + Math.sin(camPitch) * d, player.z + Math.cos(camYaw) * Math.cos(camPitch) * d), Math.min(1, dt * 3));
     } else {
       const focus = new THREE.Vector3(player.x, camGroundY + 1.6, player.z);
       camTarget.lerp(focus, 1 - Math.exp(-dt * 12));
@@ -3007,15 +3063,18 @@ function loop(t: number) {
   if (TER && (driving || viewMode === "map")) camPos.y = Math.max(camPos.y, terrainHeight(camPos.x, camPos.z) + 2.5);
   camera.position.copy(camPos);
   camera.lookAt(camTarget);
-  followShadow(camTarget.x, camTarget.z);
+  followShadow(camTarget.x, camTarget.z, camTarget.y);
+  sky.position.copy(camera.position); stars.position.copy(camera.position); // sky, stars and moon travel with you
+  moon.position.copy(moonDir).multiplyScalar(2500).add(camera.position);
   updateGuide();
   if ((occFrame = (occFrame + 1) % 2) === 0) {
     if (viewMode === "first" && !driving) updateOcclusion(camPos, camPos); // nothing between your eyes and you: clear any fade
     else updateOcclusion(camTarget, camPos);
   }
   // map view looks at the whole town from ~600 up: push the fog out of the way while it's on
-  const fogFar = viewMode === "map" && !driving ? 2400 : 650, fog = scene.fog as THREE.Fog | null;
-  if (fog && fog.far !== fogFar) { fog.far = fogFar; fog.near = fogFar === 650 ? 160 : 1400; camera.far = fogFar === 650 ? 900 : 2600; camera.updateProjectionMatrix(); }
+  // see the next city: the fog starts far out (map view pushes it further still)
+  const fogFar = viewMode === "map" && !driving ? 9000 : 4200, fog = scene.fog as THREE.Fog | null;
+  if (fog && fog.far !== fogFar) { fog.far = fogFar; fog.near = fogFar === 4200 ? 700 : 4000; camera.far = Math.max(8500, fogFar + 800); camera.updateProjectionMatrix(); }
 
   Object.keys(peers).forEach((pid) => {
     const p = peers[pid]!;
@@ -3046,10 +3105,11 @@ function loop(t: number) {
     const el = landmarkLabels[idx]!;
     const got = isCollected(l);
     el.className = "label3d" + (got ? " got" : "");
-    if (l.mesh) {
-      const box3 = new THREE.Box3().setFromObject(l.mesh);
-      updateLabel(el, new THREE.Vector3(l.x, box3.max.y + 1.5, l.z));
-    }
+    const lpx = driving ? chassisBody.position.x : player.x, lpz = driving ? chassisBody.position.z : player.z;
+    if (l.mesh && Math.hypot(l.x - lpx, l.z - lpz) < 320) { // only the sights around you (the whole country's would clutter)
+      if (l.top === undefined) l.top = new THREE.Box3().setFromObject(l.mesh).max.y;
+      updateLabel(el, new THREE.Vector3(l.x, l.top + 1.5, l.z));
+    } else el.style.display = "none";
   });
 
   composer.render();

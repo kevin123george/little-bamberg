@@ -11,7 +11,7 @@ type P = number[];
 export type WorldData = {
   K: number; vm: number; ref_m: number; city_half: number;
   grid: { x0: number; z0: number; nx: number; nz: number; step: number; h16: string };
-  cities: Record<string, { x: number; z: number; y: number; moved_km: number }>;
+  cities: Record<string, { x: number; z: number; y: number; half?: number; moved_km: number }>;
   sights: Record<string, P>;
   outline: P[];
   rivers: { name: string; hw: number; line: P[] }[];
@@ -46,7 +46,6 @@ export function countryEdgeFn(wd: WorldData): (x: number, z: number) => number {
 }
 
 export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
-  const half = wd.city_half;
   const g = wd.grid;
   const bytes = Uint8Array.from(atob(g.h16), (c) => c.charCodeAt(0));
   const h16 = new Int16Array(bytes.buffer);
@@ -58,11 +57,12 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
     const at = (a: number, b: number) => h16[b * g.nx + a]! / 10;
     return (at(ix, iz) * (1 - tx) + at(ix + 1, iz) * tx) * (1 - tz) + (at(ix, iz + 1) * (1 - tx) + at(ix + 1, iz + 1) * tx) * tz;
   }
-  const cityList = Object.entries(wd.cities).map(([id, c]) => ({ id, ...c }));
+  const cityList = Object.entries(wd.cities).map(([id, c]) => ({ id, ...c, half: c.half ?? wd.city_half }));
   function cityAt(x: number, z: number) {
-    for (const c of cityList) if (Math.abs(x - c.x) <= half && Math.abs(z - c.z) <= half) return c;
+    for (const c of cityList) if (Math.abs(x - c.x) <= c.half && Math.abs(z - c.z) <= c.half) return c;
     return null;
   }
+  const SEA = 0.35; // coarse height at or below this (x 12 m) is sea: the North Sea, the Baltic, the Wadden flats
 
   // ---------- spatial hash of water and roads (64-unit cells)
   type Seg = { ax: number; az: number; bx: number; bz: number; la: number; lb: number; hw: number };
@@ -113,6 +113,9 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
   // ---------- countryside ground: coarse heights + a little detail, riverbeds and lakes carved, city squares tucked under
   function countryWater(x: number, z: number): { level: number; dist: number } {
     let level = NaN, dist = 99;
+    const ch = coarse(x, z);
+    if (ch <= SEA) return { level: 0, dist: -1 };
+    if (ch < SEA + 1.2) { level = 0; dist = (ch - SEA) * 8; } // the coast
     for (const s of near(waterSegs, hashW, x, z)) {
       const { t, d } = segT(s, x, z), e = d - s.hw;
       if (e < dist) { dist = e; level = s.la + (s.lb - s.la) * t; }
@@ -127,6 +130,7 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
   function countryH(x: number, z: number): number {
     let h = coarse(x, z) + (vnoise(x / 40, z / 40) - 0.5) * 1.2;
     const w = countryWater(x, z);
+    if (coarse(x, z) <= SEA) return Math.min(h, -1.2); // sea floor
     if (w.dist < 8 && !isNaN(w.level)) {
       const bed = w.level - 1.4;
       h = w.dist <= 0 ? Math.min(h, bed) : Math.min(h, bed + (Math.max(h, w.level + 0.4) - bed) * Math.min(1, w.dist / 8));
@@ -138,7 +142,7 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
     const c = cityAt(x, z);
     if (c) {
       const cheb = Math.max(Math.abs(x - c.x), Math.abs(z - c.z));
-      h -= cheb < half - 12 ? 40 : 0.3; // under the city map (which blends into this height at its edge)
+      h -= cheb < c.half - 12 ? 40 : 0.3; // under the city map (which blends into this height at its edge)
     }
     return h;
   }
@@ -267,6 +271,38 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
   const riverMesh = addMerged(rGeos.map((gg) => { for (const k of Object.keys(gg.attributes)) if (k !== "position" && k !== "normal" && k !== "uv") gg.deleteAttribute(k); if (!gg.attributes.uv) gg.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array((gg.attributes.position!.count) * 2), 2)); return gg.index ? gg.toNonIndexed() : gg; }), waterMat);
   if (riverMesh) riverMesh.renderOrder = 1;
 
+  const FIELD = ["#9fd174", "#93c97a", "#c8d27a", "#b3cf6e", "#a9c983", "#d7cf85", "#8cc26f"].map((c) => new THREE.Color(c));
+  // ---------- the sea: one plane at sea level under everything (land above it hides it)
+  {
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(X1 - g.x0 + 4000, Z1 - g.z0 + 4000), waterMat);
+    sea.rotation.x = -Math.PI / 2; sea.position.set((g.x0 + X1) / 2, 0, (g.z0 + Z1) / 2); sea.renderOrder = 0;
+    group.add(sea);
+  }
+
+  // ---------- far view: the whole country as coarse 512-unit tiles (every 64 units), shown only where no detailed chunk is
+  const FT = 512, FS = 64, FN = FT / FS + 1;
+  const farTiles: { cx: number; cz: number; mesh: THREE.Mesh }[] = [];
+  const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+  for (let tz = Math.floor(g.z0 / FT); tz * FT < Z1; tz++) for (let tx = Math.floor(g.x0 / FT); tx * FT < X1; tx++) {
+    const pos = new Float32Array(FN * FN * 3), col = new Float32Array(FN * FN * 3), idx: number[] = [];
+    const tmp = new THREE.Color();
+    for (let j = 0; j < FN; j++) for (let i = 0; i < FN; i++) {
+      const x = tx * FT + i * FS, z = tz * FT + j * FS, raw = coarse(x, z), c = cityAt(x, z), k = j * FN + i;
+      const y = raw <= SEA ? -1.5 : raw - (c ? 6 : 1.2); // a little under the detailed ground and the city maps
+      pos.set([x, y, z], k * 3);
+      if (raw <= SEA) tmp.set("#a89a6e"); else if (raw > 125) tmp.set("#f4f6f8"); else if (raw > 90) tmp.set("#b3a58f");
+      else if (vnoise(x / 160, z / 160) > 0.6 || (raw > 22 && vnoise(x / 90 + 7, z / 90) > 0.42)) tmp.set("#5f9b4c");
+      else tmp.copy(FIELD[Math.floor(hash2(Math.floor(x / 52), Math.floor(z / 44)) * FIELD.length)]!);
+      col.set([tmp.r, tmp.g, tmp.b], k * 3);
+    }
+    for (let j = 0; j < FN - 1; j++) for (let i = 0; i < FN - 1; i++) { const a = j * FN + i; idx.push(a, a + FN, a + 1, a + 1, a + FN, a + FN + 1); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    geo.setIndex(idx); geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, farMat); mesh.receiveShadow = false; group.add(mesh);
+    farTiles.push({ cx: tx * FT + FT / 2, cz: tz * FT + FT / 2, mesh });
+  }
+
   // ---------- countryside chunks
   const outline = wd.outline;
   const oMask = (() => { // inside Bavaria? on a 64-unit mask
@@ -277,7 +313,6 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
       return m.get(k)!;
     };
   })();
-  const FIELD = ["#9fd174", "#93c97a", "#c8d27a", "#b3cf6e", "#a9c983", "#d7cf85", "#8cc26f"].map((c) => new THREE.Color(c));
   const cForest = new THREE.Color("#5f9b4c"), cRock = new THREE.Color("#b3a58f"), cSnow = new THREE.Color("#f4f6f8"), cSand = new THREE.Color("#d9ca97"), cBed = new THREE.Color("#a89a6e"), cGrey = new THREE.Color("#b9bfa9");
   const forestAt = (x: number, z: number, h: number) => vnoise(x / 160, z / 160) > 0.6 || (h > 22 && vnoise(x / 90 + 7, z / 90) > 0.42);
   const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: false });
@@ -401,6 +436,10 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
     }
     pending.sort((a, b) => Math.hypot(a[0] * CH - px, a[1] * CH - pz) - Math.hypot(b[0] * CH - px, b[1] * CH - pz));
     for (const [ix, iz] of pending.slice(0, budget)) { const c = buildChunk(ix, iz); chunks.set(c.key, c); added.push(c); }
+    for (const t of farTiles) { // coarse tile hidden only when every corner is inside the detailed ring
+      const r = Math.hypot(Math.abs(t.cx - px) + FT / 2, Math.abs(t.cz - pz) + FT / 2);
+      t.mesh.visible = r > VIS - CH * 0.75;
+    }
     return { added, removed };
   }
   function grounds(): THREE.Object3D[] { return [...cityList.map((c) => cityTer[c.id]!.ground), ...[...chunks.values()].map((c) => c.ground)]; }

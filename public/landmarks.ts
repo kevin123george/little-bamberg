@@ -9,13 +9,13 @@ import {
   fountain, balustrade, battlements, flag, flowerBox, stoneBridge,
 } from "./toykit";
 
-type Builder = (w: number, d: number) => THREE.Group;
-const G = (...o: THREE.Object3D[]) => { const g = new THREE.Group(); g.add(...o); return g; };
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+export type Builder = (w: number, d: number) => THREE.Group;
+export const G = (...o: THREE.Object3D[]) => { const g = new THREE.Group(); g.add(...o); return g; };
+export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 // ---------- shared pieces ----------
 /** A gothic hall church: nave with steep roof, buttresses, pointed windows. Front (west) at +z. */
-function gothicNave(w: number, d: number, wallH: number, wall: string, roof: string): THREE.Group {
+export function gothicNave(w: number, d: number, wallH: number, wall: string, roof: string): THREE.Group {
   const g = G(rbox(w, wallH, d, wall, 0.15), at(gable(d, w, wallH * 0.75, roof), 0, wallH, 0));
   g.children[1]!.rotation.y = Math.PI / 2;
   for (const side of [-1, 1]) {
@@ -29,7 +29,7 @@ function gothicNave(w: number, d: number, wallH: number, wall: string, roof: str
   return g;
 }
 /** A romanesque/baroque church body with round windows. */
-function roundNave(w: number, d: number, wallH: number, wall: string, roof: string): THREE.Group {
+export function roundNave(w: number, d: number, wallH: number, wall: string, roof: string): THREE.Group {
   const g = G(rbox(w, wallH, d, wall, 0.15));
   const r = gable(d, w, wallH * 0.6, roof); r.rotation.y = Math.PI / 2; g.add(at(r, 0, wallH, 0));
   for (const side of [-1, 1]) {
@@ -41,7 +41,7 @@ function roundNave(w: number, d: number, wallH: number, wall: string, roof: stri
   return g;
 }
 /** Baroque tower with onion (or haube) top; returns group, total height ~ h + cap. */
-function baroqueTower(w: number, h: number, color: string, cap: "onion" | "haube" | "spire" | "pyramid" = "onion", capColor = C.copper): THREE.Group {
+export function baroqueTower(w: number, h: number, color: string, cap: "onion" | "haube" | "spire" | "pyramid" = "onion", capColor = C.copper): THREE.Group {
   const g = tower(w, h, color, { clock: true });
   if (cap === "onion") g.add(at(onion(w * 0.55, capColor), 0, h, 0));
   else if (cap === "haube") g.add(at(haube(w * 0.55, capColor), 0, h, 0));
@@ -58,7 +58,7 @@ export function toyHouse(w: number, d: number, floors: number, wall: string, roo
   g.add(at(door(1.3, 2.4), w * 0.22, 0, d / 2 + 0.01));
   return g;
 }
-function market(n: number, spread: number, roof: string): THREE.Group {
+export function market(n: number, spread: number, roof: string): THREE.Group {
   const g = new THREE.Group();
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2, r = spread * (0.35 + 0.5 * ((i * 7) % 5) / 5);
@@ -68,12 +68,12 @@ function market(n: number, spread: number, roof: string): THREE.Group {
   }
   return g;
 }
-function plazaDisc(r: number, color = "#e7dcc6"): THREE.Mesh {
+export function plazaDisc(r: number, color = "#e7dcc6"): THREE.Mesh {
   const m = cyl(r, r, 0.12, color, 28);
   m.receiveShadow = true;
   return m;
 }
-function lollipop(h = 3): THREE.Group {
+export function lollipop(h = 3): THREE.Group {
   return G(cyl(0.18, 0.24, h * 0.5, "#8a5a3c", 6), at(sphere(h * 0.32, C.green), 0, h * 0.35, 0));
 }
 
@@ -302,7 +302,7 @@ const nuernberg: Record<string, Builder> = {
     return g;
   },
 };
-function churchTwinSpires(w: number, d: number, st: string, roof: string, spireC: string): THREE.Group {
+export function churchTwinSpires(w: number, d: number, st: string, roof: string, spireC: string): THREE.Group {
   const L = clamp(Math.max(w, d), 30, 44), W = clamp(Math.min(w, d), 12, 17);
   const nave = gothicNave(W, L * 0.85, 13, st, roof); nave.position.z = -L * 0.07;
   const g = G(nave);
