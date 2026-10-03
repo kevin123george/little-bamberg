@@ -3,3 +3,6 @@ data
 .git
 *.log
 .DS_Store
+.cache
+.venv
+scripts/__pycache__

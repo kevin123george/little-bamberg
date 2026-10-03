@@ -62,7 +62,7 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
     for (const c of cityList) if (Math.abs(x - c.x) <= c.half && Math.abs(z - c.z) <= c.half) return c;
     return null;
   }
-  const SEA = 0.35; // coarse height at or below this (x 12 m) is sea: the North Sea, the Baltic, the Wadden flats
+  const SEA = 0.02; // coarse height at or below this (x 12 m, i.e. ~0.25 m) is sea: the elevation data has the sea at 0 or below
 
   // ---------- spatial hash of water and roads (64-unit cells)
   type Seg = { ax: number; az: number; bx: number; bz: number; la: number; lb: number; hw: number };
@@ -115,7 +115,7 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
     let level = NaN, dist = 99;
     const ch = coarse(x, z);
     if (ch <= SEA) return { level: 0, dist: -1 };
-    if (ch < SEA + 1.2) { level = 0; dist = (ch - SEA) * 8; } // the coast
+    if (ch < SEA + 0.15) { level = 0; dist = (ch - SEA) * 30; } // the shore right by the sea (the ocean cells are marked in the data)
     for (const s of near(waterSegs, hashW, x, z)) {
       const { t, d } = segT(s, x, z), e = d - s.hw;
       if (e < dist) { dist = e; level = s.la + (s.lb - s.la) * t; }
@@ -139,6 +139,7 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
       const { d } = segT(s, x, z);
       if (d < s.hw + 3) h = h * 0.7 + coarse(x, z) * 0.3;
     }
+    if (coarse(x, z) > SEA && !(w.dist <= 0)) h = Math.max(h, 0.08); // lowland (the marshes by Hamburg, Bremen) stays dry: never under the sea plane
     const c = cityAt(x, z);
     if (c) {
       const cheb = Math.max(Math.abs(x - c.x), Math.abs(z - c.z));
@@ -275,7 +276,7 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
   // ---------- the sea: one plane at sea level under everything (land above it hides it)
   {
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(X1 - g.x0 + 4000, Z1 - g.z0 + 4000), waterMat);
-    sea.rotation.x = -Math.PI / 2; sea.position.set((g.x0 + X1) / 2, 0, (g.z0 + Z1) / 2); sea.renderOrder = 0;
+    sea.rotation.x = -Math.PI / 2; sea.position.set((g.x0 + X1) / 2, -0.6, (g.z0 + Z1) / 2); // well under the lowest land: no flicker from afar sea.renderOrder = 0;
     group.add(sea);
   }
 
@@ -288,7 +289,7 @@ export function buildWorld(wd: WorldData, cityTer: Record<string, Terrain>) {
     const tmp = new THREE.Color();
     for (let j = 0; j < FN; j++) for (let i = 0; i < FN; i++) {
       const x = tx * FT + i * FS, z = tz * FT + j * FS, raw = coarse(x, z), c = cityAt(x, z), k = j * FN + i;
-      const y = raw <= SEA ? -1.5 : raw - (c ? 6 : 1.2); // a little under the detailed ground and the city maps
+      const y = raw <= SEA ? -1.5 : c ? raw - 6 : Math.max(0.03, raw - 1.2); // a little under the detailed ground and the city maps, but land stays above the sea
       pos.set([x, y, z], k * 3);
       if (raw <= SEA) tmp.set("#a89a6e"); else if (raw > 125) tmp.set("#f4f6f8"); else if (raw > 90) tmp.set("#b3a58f");
       else if (vnoise(x / 160, z / 160) > 0.6 || (raw > 22 && vnoise(x / 90 + 7, z / 90) > 0.42)) tmp.set("#5f9b4c");

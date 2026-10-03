@@ -190,14 +190,22 @@ def main():
     nx, nz = (x1 - x0) // STEP + 1, (z1 - z0) // STEP + 1
     print(f"world {x1 - x0} x {z1 - z0} units, grid {nx} x {nz}", flush=True)
 
-    # --- heights, vectorised row by row
+    # --- heights, vectorised row by row; the sea comes from Natural Earth's ocean (the elevation data alone can't tell the
+    # marshes by Bremen and Hamburg, at or just below 0 m, from the North Sea)
+    import shapely
+    from shapely.geometry import shape as shp, box as sbox
+    oc = shapefile.Reader(str(DATA / "ne_10m_ocean" / "ne_10m_ocean.shp"))
+    ocean = shapely.intersection(shapely.unary_union([shp(s.__geo_interface__) for s in oc.shapes()]), sbox(bb[2] - 2, bb[0] - 2, bb[3] + 2, bb[1] + 2))
+    shapely.prepare(ocean)
     sample = mosaic(bb[0] - 1, bb[1] + 1, bb[2] - 1, bb[3] + 1)
     grid = np.zeros((nz, nx), np.float32)
     X = x0 + np.arange(nx) * STEP
     for iz in range(nz):
         W = np.stack([X, np.full(nx, z0 + iz * STEP)], -1)
         la, lo = unproj(to_real(W))
-        grid[iz] = (np.maximum(sample(la, lo), -5) - REF_M) / VM
+        h = (np.maximum(sample(la, lo), -5) - REF_M) / VM
+        sea = shapely.contains_xy(ocean, lo, la)
+        grid[iz] = np.where(sea, np.minimum(h, -0.5), np.maximum(h, 0.06))
     print(f"  heights done ({time.time() - t0:.0f}s)", flush=True)
 
     cities = {}

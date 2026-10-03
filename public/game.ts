@@ -31,6 +31,7 @@ type CityMeta = {
   overview?: boolean; m_per_unit?: number; outline?: number[][]; rivers?: number[][][];
   lakes?: { cx: number; cz: number; rx: number; rz: number }[]; portals?: { id: string; x: number; z: number }[];
 };
+(window as any).__T0 = performance.now(); (window as any).__mark = (n: string) => location.search.includes("debug") && console.log("[load]", n, Math.round(performance.now() - (window as any).__T0), Math.round(((performance as any).memory?.usedJSHeapSize || 0) / 1048576));
 // one Germany: the world layout, then every city's map (fetched in parallel)
 const WORLD_DATA: WorldData = await fetch("./world/world.json").then((r) => r.json());
 const CITY_MAPS: Record<string, any> = { bayern: bayernData };
@@ -132,11 +133,13 @@ const MAP = mapData as {
 const TERRAIN_DATA = true;
 const COUNTRY_EDGE = countryEdgeFn(WORLD_DATA);
 const CITY_TER: Record<string, Terrain> = {};
+(window as any).__mark?.("before-terrains");
 await Promise.all(Object.entries(WORLD_DATA.cities).map(async ([id, c]) => {
   const td: TerrainData = await fetch(`./terrain/${id}.json`).then((r) => r.json());
   CITY_TER[id] = buildTerrain(td, { grassMap: (() => { const t = createGrassTexture(); t.repeat.set(1, 1); return t; })(), skirt: false,
     edgeTo: (x, z) => COUNTRY_EDGE(x + c.x, z + c.z) - c.y });
 }));
+(window as any).__mark?.("before-world");
 const TER = buildWorld(WORLD_DATA, CITY_TER);
 const HALF = IS_OVERVIEW ? 600 : 290; // map half-extent, x/z in [-HALF, HALF] -- sized to the real old-town spread (all of Bavaria in the overview)
 
@@ -1014,6 +1017,7 @@ function ribbon(line: Footprint, halfW: number, lift: number): THREE.BufferGeome
   for (let i = 0; i < pos.count; i++) pos.setY(i, groundHeight(pos.getX(i), pos.getZ(i)) + lift);
   return geo;
 }
+(window as any).__mark?.("before-roads");
 const asphaltGeos: THREE.BufferGeometry[] = [], kerbGeos: THREE.BufferGeometry[] = [];
 MAP.roads.forEach((road) => {
   if (road.line.length < 2) return;
@@ -1064,6 +1068,7 @@ function house(x: number, z: number, w: number, h: number, d: number, wallColor:
   return g;
 }
 
+(window as any).__mark?.("before-landmarks");
 buildToyLandmarks();
 
 // ================= Decorative scatter: generic houses + trees =================
@@ -1348,46 +1353,65 @@ const HOUSE_RECTS: Footprint[] = [];
 const DETAIL: { obj: THREE.Object3D; x: number; z: number }[] = []; // near-only detail (houses, trees, lamps)
 const FAR_HOUSES: { obj: THREE.Object3D; x: number; z: number; city: string }[] = []; // each city's houses as plain blocks, for the view from afar
 const CITY_HOUSES = new Map<string, THREE.Object3D[]>(); // the real houses, per city
+type HouseSpec = { cx: number; cz: number; w: number; d: number; i: number; rot: number; hi: number; lo: number };
+const HOUSE_WALLS = [TOY.plaster, TOY.rose, TOY.ochre, TOY.sky, TOY.salmon, TOY.mint, TOY.cream, TOY.yellow];
+const HOUSE_ROOFS = [TOY.roof, TOY.roofDark, "#e27a4e"];
+/** Detailed toy houses not built yet, per city and 36-unit block: built when you come near (houseBuildTick). */
+const PENDING_BLOCKS = new Map<string, Map<string, HouseSpec[]>>();
+function buildBlock(cid: string, specs: HouseSpec[]) {
+  const blk = new THREE.Group();
+  for (const h of specs) {
+    const floors = IS_OVERVIEW ? 1 : 2 + (h.i % 3 === 0 ? 1 : 0);
+    const m = toyHouse(h.w, h.d, floors, HOUSE_WALLS[h.i % HOUSE_WALLS.length]!, HOUSE_ROOFS[(h.i * 7) % HOUSE_ROOFS.length]!, h.i % 6 === 0);
+    m.rotation.y = h.rot; m.position.set(h.cx, h.hi, h.cz); blk.add(m);
+    if (h.hi - h.lo > 0.2) { const pl = rbox(h.w + 0.5, h.hi - h.lo + 0.8, h.d + 0.5, "#cdb48a", 0.2); pl.position.set(h.cx, h.lo - 0.8, h.cz); pl.rotation.y = h.rot; blk.add(pl); }
+  }
+  const b = bake(blk); scene.add(b); if (!IS_OVERVIEW) occluders.push(b);
+  if (!CITY_HOUSES.has(cid)) CITY_HOUSES.set(cid, []); CITY_HOUSES.get(cid)!.push(b);
+}
+/** Build up to `budget` pending blocks of a city; true when the city is complete. */
+function buildCityHouses(cid: string, budget = Infinity): boolean {
+  const pend = PENDING_BLOCKS.get(cid); if (!pend) return true;
+  for (const [k, specs] of pend) { if (budget-- <= 0) return false; buildBlock(cid, specs); pend.delete(k); }
+  PENDING_BLOCKS.delete(cid);
+  return true;
+}
 function scatterHouses() {
-  const walls = [TOY.plaster, TOY.rose, TOY.ochre, TOY.sky, TOY.salmon, TOY.mint, TOY.cream, TOY.yellow];
-  const roofs = [TOY.roof, TOY.roofDark, "#e27a4e"];
+  const walls = HOUSE_WALLS, roofs = HOUSE_ROOFS;
   const lmR = LANDMARKS.map((l) => { const fp = MAP.landmarks[l.id]?.footprint as Footprint | undefined; const o = fp && fp.length >= 3 ? obb(fp) : null; return { x: l.x, z: l.z, r: o ? Math.hypot(o.w, o.d) / 2 + 7 : 16 }; });
   const cand = MAP.scatter_buildings.map((b) => ({ ...obb(b.footprint as Footprint), city: (b as { city?: string }).city || "" }))
-    .filter((o) => !lmR.some((l) => Math.hypot(l.x - o.cx, l.z - o.cz) < l.r) && waterDist(o.cx, o.cz) > 3);
+    .filter((o) => !lmR.some((l) => Math.abs(l.x - o.cx) < l.r && Math.hypot(l.x - o.cx, l.z - o.cz) < l.r) && waterDist(o.cx, o.cz) > 3);
   const limit = IS_OVERVIEW ? cand.length : 300;
   const cc = (o: { city: string }) => WORLD_DATA.cities[o.city] || { x: 0, z: 0 };
   const dc = (o: { cx: number; cz: number; city: string }) => Math.hypot(o.cx - cc(o).x, o.cz - cc(o).z);
   cand.sort((a, b) => dc(a) - dc(b));
   const perCity = new Map<string, number>();
-  const blocks = new Map<string, THREE.Group>();
   const farGeos = new Map<string, THREE.BufferGeometry[]>();
-  const blockCity = new Map<string, string>();
-  const DETAIL_PUSH: never[] = []; void DETAIL_PUSH;
-  const blockOf = (x: number, z: number) => {
-    const k = Math.floor(x / 36) + "," + Math.floor(z / 36);
-    if (!blocks.has(k)) blocks.set(k, new THREE.Group());
-    return blocks.get(k)!;
-  };
-  // keep a gap between houses: no roof piles, room to walk and drive between them
-  const placed: { x: number; z: number; r: number }[] = [];
+  // keep a gap between houses: no roof piles, room to walk and drive between them (placed houses indexed by 24-unit cell)
+  const placed = new Map<string, { x: number; z: number; r: number }[]>();
   const picked: { o: ReturnType<typeof obb> & { city: string }; w: number; d: number }[] = [];
   for (const o of cand) {
     if ((perCity.get(o.city) || 0) >= limit) continue;
     const w = IS_OVERVIEW ? o.w * 0.8 : Math.min(11, Math.max(4.5, o.w * 0.85)), d = IS_OVERVIEW ? o.d * 0.8 : Math.min(8, Math.max(4, o.d * 0.85));
     const r = Math.hypot(w, d) / 2;
     const gap = IS_OVERVIEW ? 0.5 : 2.5 + Math.max(0, dc(o) - 110) / 22; // the old town dense, the outskirts airy
-    if (placed.some((p) => Math.hypot(p.x - o.cx, p.z - o.cz) < p.r + r + gap)) continue;
-    placed.push({ x: o.cx, z: o.cz, r }); picked.push({ o, w, d }); perCity.set(o.city, (perCity.get(o.city) || 0) + 1);
+    const gx = Math.floor(o.cx / 24), gz = Math.floor(o.cz / 24);
+    let clash = false;
+    for (let dx = -2; dx <= 2 && !clash; dx++) for (let dz = -2; dz <= 2 && !clash; dz++)
+      clash = (placed.get((gx + dx) + "," + (gz + dz)) || []).some((p) => Math.hypot(p.x - o.cx, p.z - o.cz) < p.r + r + gap);
+    if (clash) continue;
+    const pk = gx + "," + gz; if (!placed.has(pk)) placed.set(pk, []); placed.get(pk)!.push({ x: o.cx, z: o.cz, r });
+    picked.push({ o, w, d }); perCity.set(o.city, (perCity.get(o.city) || 0) + 1);
   }
   picked.forEach(({ o, w, d }, i) => {
-    const h = toyHouse(w, d, IS_OVERVIEW ? 1 : 2 + (i % 3 === 0 ? 1 : 0), walls[i % walls.length]!, roofs[(i * 7) % roofs.length]!, i % 6 === 0);
-    h.rotation.y = -o.angle + (i % 2 ? Math.PI : 0);
-    const sp = groundSpan(o.cx, o.cz, w / 2, d / 2, h.rotation.y);
-    h.position.set(o.cx, sp.hi, o.cz);
-    const blk = blockOf(o.cx, o.cz);
-    blk.add(h); blockCity.set(Math.floor(o.cx / 36) + "," + Math.floor(o.cz / 36), o.city);
+    const rot = -o.angle + (i % 2 ? Math.PI : 0);
+    const sp = groundSpan(o.cx, o.cz, w / 2, d / 2, rot);
+    const key = Math.floor(o.cx / 36) + "," + Math.floor(o.cz / 36);
+    if (!PENDING_BLOCKS.has(o.city)) PENDING_BLOCKS.set(o.city, new Map());
+    const pb = PENDING_BLOCKS.get(o.city)!; if (!pb.has(key)) pb.set(key, []);
+    pb.get(key)!.push({ cx: o.cx, cz: o.cz, w, d, i, rot, hi: sp.hi, lo: sp.lo });
     { // the far version: a coloured block with a roof, all of a city's in one mesh (see FAR_HOUSES)
-      const hh = (IS_OVERVIEW ? 1 : 2 + (i % 3 === 0 ? 1 : 0)) * 2.6, rot = h.rotation.y;
+      const hh = (IS_OVERVIEW ? 1 : 2 + (i % 3 === 0 ? 1 : 0)) * 2.6;
       const body = new THREE.BoxGeometry(w, hh, d).translate(0, hh / 2, 0), roof = new THREE.ConeGeometry(Math.max(w, d) * 0.72, 2.6, 4).rotateY(Math.PI / 4).translate(0, hh + 1.3, 0);
       roof.scale(w / Math.max(w, d), 1, d / Math.max(w, d));
       for (const [gg, c] of [[body, walls[i % walls.length]!], [roof, roofs[(i * 7) % roofs.length]!]] as const) {
@@ -1400,7 +1424,6 @@ function scatterHouses() {
         farGeos.get(o.city)!.push(g2);
       }
     }
-    if (sp.hi - sp.lo > 0.2) { const pl = rbox(w + 0.5, sp.hi - sp.lo + 0.8, d + 0.5, "#cdb48a", 0.2); pl.position.set(o.cx, sp.lo - 0.8, o.cz); pl.rotation.y = h.rotation.y; blk.add(pl); }
     const c = Math.cos(o.angle), sn = Math.sin(o.angle);
     HOUSE_RECTS.push([[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([u, v]) => [o.cx + u! * c - v! * sn, o.cz + u! * sn + v! * c]));
   });
@@ -1409,12 +1432,11 @@ function scatterHouses() {
     const m = new THREE.Mesh(mergeGeometries(geos)!, farMat); m.visible = false; scene.add(m);
     const c = WORLD_DATA.cities[cid]; if (c) FAR_HOUSES.push({ obj: m, x: c.x, z: c.z, city: cid });
   }
-  for (const [key, blk] of blocks) {
-    const b = bake(blk); scene.add(b); if (!IS_OVERVIEW) occluders.push(b);
-    const bc = blockCity.get(key) || ""; if (!CITY_HOUSES.has(bc)) CITY_HOUSES.set(bc, []); CITY_HOUSES.get(bc)!.push(b); void key;
-  }
+  buildCityHouses(SPAWN_CITY); // the town you start in is complete from the first frame; the others build as you come near
 }
+(window as any).__mark?.("before-houses");
 scatterHouses();
+(window as any).__mark?.("after-houses");
 
 // Trees are instanced (two draw calls total, however many hundred there are)
 // rather than one Group per tree -- needed once avenue trees along the real
@@ -1423,15 +1445,25 @@ const treePlacements: { x: number; z: number; scale: number }[] = [];
 function addTree(x: number, z: number, scale = 1) {
   treePlacements.push({ x, z, scale });
 }
-function insideHouse(x: number, z: number): boolean { return HOUSE_RECTS.some((f) => Math.abs(f[0]![0]! - x) < 14 && Math.abs(f[0]![1]! - z) < 14 && pointInPoly(x, z, f)); }
+/** A spatial index of footprints (16-unit cells): a point only tests the shapes in its own cell, not all of Germany's. */
+function footprintIndex(fps: Footprint[], pad: number) {
+  const cells = new Map<string, Footprint[]>();
+  for (const f of fps) {
+    const xs = f.map((p) => p[0]!), zs = f.map((p) => p[1]!);
+    for (let cx = Math.floor((Math.min(...xs) - pad) / 16); cx <= Math.floor((Math.max(...xs) + pad) / 16); cx++)
+      for (let cz = Math.floor((Math.min(...zs) - pad) / 16); cz <= Math.floor((Math.max(...zs) + pad) / 16); cz++) {
+        const k = cx + "," + cz; if (!cells.has(k)) cells.set(k, []); cells.get(k)!.push(f);
+      }
+  }
+  return (x: number, z: number) => cells.get(Math.floor(x / 16) + "," + Math.floor(z / 16)) || [];
+}
+const housesAt = footprintIndex(HOUSE_RECTS, 0);
+function insideHouse(x: number, z: number): boolean { return housesAt(x, z).some((f) => pointInPoly(x, z, f)); }
 const TREE_BLOCKERS: Footprint[] = IS_BAMBERG ? [] : [...MAP.scatter_buildings.map((b) => b.footprint), ...Object.values(MAP.landmarks).map((l) => l.footprint || []).filter((f) => f.length >= 3)];
+const blockersAt = footprintIndex(TREE_BLOCKERS, 2);
 function treeBlocked(x: number, z: number): boolean {
   if (IS_BAMBERG) return false;
-  for (const f of TREE_BLOCKERS) {
-    const p0 = f[0]!;
-    if (Math.abs(p0[0]! - x) > 40 || Math.abs(p0[1]! - z) > 40) continue;
-    if (pointInPoly(x, z, f) || pointInPoly(x + 1.5, z, f) || pointInPoly(x - 1.5, z, f)) return true;
-  }
+  for (const f of blockersAt(x, z)) if (pointInPoly(x, z, f) || pointInPoly(x + 1.5, z, f) || pointInPoly(x - 1.5, z, f)) return true;
   return false;
 }
 for (let t = 0; t < (CITY_HILLS.length ? 55 : 0); t++) {
@@ -1469,7 +1501,15 @@ for (const [cid, cw] of Object.entries(WORLD_DATA.cities)) for (let t3 = 0, plac
 { // toy-town parks: clumps of round trees in the open grass, clear of streets, houses, sights and water
   const segs: number[][] = [];
   for (const r of TER ? MAP.roads : []) for (let i = 0; i < r.line.length - 1; i++) segs.push([r.line[i]![0]!, r.line[i]![1]!, r.line[i + 1]![0]!, r.line[i + 1]![1]!, r.width / 2 + 2]);
-  const nearRoad = (x: number, z: number) => segs.some(([ax, az, bx, bz, hw]) => {
+  const segCells = new Map<string, number[][]>(); // the road segments by 16-unit cell
+  for (const sg of segs) {
+    const [ax, az, bx, bz, hw] = sg as [number, number, number, number, number];
+    for (let cx = Math.floor((Math.min(ax, bx) - hw) / 16); cx <= Math.floor((Math.max(ax, bx) + hw) / 16); cx++)
+      for (let cz = Math.floor((Math.min(az, bz) - hw) / 16); cz <= Math.floor((Math.max(az, bz) + hw) / 16); cz++) {
+        const k = cx + "," + cz; if (!segCells.has(k)) segCells.set(k, []); segCells.get(k)!.push(sg);
+      }
+  }
+  const nearRoad = (x: number, z: number) => (segCells.get(Math.floor(x / 16) + "," + Math.floor(z / 16)) || []).some(([ax, az, bx, bz, hw]) => {
     if (Math.min(ax!, bx!) - 8 > x || Math.max(ax!, bx!) + 8 < x || Math.min(az!, bz!) - 8 > z || Math.max(az!, bz!) + 8 < z) return false;
     const ex = bx! - ax!, ez = bz! - az!, L = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((x - ax!) * ex + (z - az!) * ez) / L));
     return Math.hypot(x - ax! - t * ex, z - az! - t * ez) < hw!;
@@ -1518,14 +1558,22 @@ MAP.roads.forEach((road) => {
 
 // Far-away detail is hidden (see updateDetail): houses, trees and lamps in 600-unit buckets, each with its own meshes.
 const bucketOf = (x: number, z: number) => Math.floor(x / 600) + "," + Math.floor(z / 600);
+let houseBuildCity = ""; // the nearest city whose detailed houses are still being built
+/** A few blocks of houses per frame for the city you're approaching: no freeze when a town comes into range. */
+function houseBuildTick() { if (houseBuildCity && buildCityHouses(houseBuildCity, 3)) houseBuildCity = ""; }
 function updateDetail(px: number, pz: number) {
   for (const d of DETAIL) d.obj.visible = Math.hypot(d.x - px, d.z - pz) < 1500;
-  for (const f of FAR_HOUSES) { // one city at a time: its real houses when you're near, plain blocks from afar
-    const near = Math.hypot(f.x - px, f.z - pz) < 1500 + ((WORLD_DATA.cities[f.city]?.half) ?? 296);
-    f.obj.visible = !near;
-    for (const b of CITY_HOUSES.get(f.city) || []) b.visible = near;
+  houseBuildCity = "";
+  let best = Infinity;
+  for (const f of FAR_HOUSES) { // one city at a time: its real houses when you're near (once built), plain blocks from afar
+    const dist = Math.hypot(f.x - px, f.z - pz), near = dist < 1500 + ((WORLD_DATA.cities[f.city]?.half) ?? 296);
+    const ready = !PENDING_BLOCKS.has(f.city);
+    f.obj.visible = !(near && ready);
+    for (const b of CITY_HOUSES.get(f.city) || []) b.visible = near && ready;
+    if (near && !ready && dist < best) { best = dist; houseBuildCity = f.city; }
   }
 }
+(window as any).__mark?.("before-tree-meshes");
 const trunkMesh = new THREE.InstancedMesh(
   new THREE.CylinderGeometry(0.32, 0.45, 2.4, 6),
   new THREE.MeshStandardMaterial({ color: "#955f41", roughness: 0.9, metalness: 0 }),
@@ -1572,6 +1620,7 @@ treePlacements.forEach((p, i) => {
 // Same road-walking placement technique as the avenue trees above, sparser.
 // Poles are always-unlit geometry; every bulb shares ONE material, so
 // updateStreetLamps() below is a single write regardless of lamp count.
+(window as any).__mark?.("before-lamps");
 const lampPlacements: { x: number; z: number }[] = [];
 (IS_OVERVIEW ? [] : MAP.roads).forEach((road) => {
   const line = road.line;
@@ -1737,35 +1786,48 @@ const groundPhysMaterial = new CANNON.Material("ground");
 // local Z (height) to world Y (up) and local Y to world -Z, which is why the
 // sample loop below reads worldZ = HALF - yi*elementSize (derived from that
 // rotation, not guessed).
+(window as any).__mark?.("before-physics");
 const HF_SEGMENTS = 290; // 2 units per city: the same grid as the drawn ground, so no hidden kerbs
 let heightfieldBody: CANNON.Body | null = null;
-for (const c of Object.values(WORLD_DATA.cities)) {
-  const H = (c.half ?? 296) - 6, segs = H, e = (H * 2) / segs, data: number[][] = []; // 2 units per cell
-  for (let xi = 0; xi <= segs; xi++) {
-    const col: number[] = [];
-    for (let yi = 0; yi <= segs; yi++) col.push(terrainHeight(c.x - H + xi * e, c.z + H - yi * e));
-    data.push(col);
-  }
+// Physics ground only around the truck (walking doesn't use it): each city's 2-unit heightfield and the countryside
+// chunks' 8-unit ones are made when the truck comes within a few hundred units and dropped when it leaves.
+const cityBodies = new Map<string, CANNON.Body>(), chunkBodies = new Map<string, CANNON.Body>();
+const liveChunks = new Map<string, { key: string; ix: number; iz: number; heights: number[][] }>();
+function heightfieldBodyAt(x0: number, z1: number, data: number[][], e: number): CANNON.Body {
   const body = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
   body.addShape(new CANNON.Heightfield(data, { elementSize: e }));
-  body.position.set(c.x - H, 0, c.z + H);
+  body.position.set(x0, 0, z1);
   body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
   physicsWorld.addBody(body);
-  heightfieldBody = heightfieldBody || body;
+  return body;
 }
-const chunkBodies = new Map<string, CANNON.Body>();
+function physicsNear(px: number, pz: number) {
+  for (const [id, c] of Object.entries(WORLD_DATA.cities)) {
+    const H = (c.half ?? 296) - 6, d = Math.max(Math.abs(px - c.x), Math.abs(pz - c.z)) - H, has = cityBodies.get(id);
+    if (d < 260 && !has) {
+      const data: number[][] = [];
+      for (let xi = 0; xi <= H; xi++) { const col: number[] = []; for (let yi = 0; yi <= H; yi++) col.push(terrainHeight(c.x - H + xi * 2, c.z + H - yi * 2)); data.push(col); }
+      const body = heightfieldBodyAt(c.x - H, c.z + H, data, 2); cityBodies.set(id, body); heightfieldBody = heightfieldBody || body;
+    } else if (d > 520 && has) { physicsWorld.removeBody(has); cityBodies.delete(id); }
+    // bridge decks and landmark walls: only the ones within reach of the truck are in the physics world
+    for (const b of CITY_STATIC.get(id) || []) {
+      const want = cityBodies.has(id) && Math.hypot(b.position.x - px, b.position.z - pz) < 350, inWorld = b.world === physicsWorld;
+      if (want && !inWorld) physicsWorld.addBody(b); else if (!want && inWorld) physicsWorld.removeBody(b);
+    }
+  }
+  for (const c of liveChunks.values()) {
+    const cx = c.ix * TER.chunkSize + TER.chunkSize / 2, cz = c.iz * TER.chunkSize + TER.chunkSize / 2, d = Math.hypot(cx - px, cz - pz), has = chunkBodies.get(c.key);
+    if (d < 420 && !has) {
+      const n = c.heights.length, data: number[][] = [];
+      for (let xi = 0; xi < n; xi++) { const col: number[] = []; for (let yi = 0; yi < n; yi++) col.push(c.heights[xi]![n - 1 - yi]!); data.push(col); }
+      chunkBodies.set(c.key, heightfieldBodyAt(c.ix * TER.chunkSize, c.iz * TER.chunkSize + TER.chunkSize, data, TER.cellSize));
+    } else if (d > 640 && has) { physicsWorld.removeBody(has); chunkBodies.delete(c.key); }
+  }
+}
 function streamWorld(px: number, pz: number, budget: number) {
   const { added, removed } = TER.stream(px, pz, budget);
-  for (const c of removed) { const b = chunkBodies.get(c.key); if (b) { physicsWorld.removeBody(b); chunkBodies.delete(c.key); } }
-  for (const c of added) {
-    const n = c.heights.length, data: number[][] = [];
-    for (let xi = 0; xi < n; xi++) { const col: number[] = []; for (let yi = 0; yi < n; yi++) col.push(c.heights[xi]![n - 1 - yi]!); data.push(col); }
-    const body = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
-    body.addShape(new CANNON.Heightfield(data, { elementSize: TER.cellSize }));
-    body.position.set(c.ix * TER.chunkSize, 0, c.iz * TER.chunkSize + TER.chunkSize);
-    body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-    physicsWorld.addBody(body); chunkBodies.set(c.key, body);
-  }
+  for (const c of removed) { liveChunks.delete(c.key); const b = chunkBodies.get(c.key); if (b) { physicsWorld.removeBody(b); chunkBodies.delete(c.key); } }
+  for (const c of added) liveChunks.set(c.key, c);
 }
 // the edge of the world: invisible walls, so the truck can't drive off into nothing
 {
@@ -1777,12 +1839,19 @@ function streamWorld(px: number, pz: number, budget: number) {
     physicsWorld.addBody(wall);
   }
 }
+// Bridge decks and landmark walls join the physics world with their city's ground (physicsNear): thousands of static
+// bodies across Germany made every physics step crawl.
+const CITY_STATIC = new Map<string, CANNON.Body[]>();
+function addCityStatic(x: number, z: number, body: CANNON.Body) {
+  const id = TER.cityAt(x, z)?.id; if (!id) { physicsWorld.addBody(body); return; }
+  if (!CITY_STATIC.has(id)) CITY_STATIC.set(id, []); CITY_STATIC.get(id)!.push(body);
+}
 for (const b of TER?.physBoxes ?? []) {
   const body = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
   body.addShape(new CANNON.Box(new CANNON.Vec3(b.half.x, b.half.y, b.half.z)));
   body.position.set(b.pos.x, b.pos.y, b.pos.z);
   body.quaternion.set(b.quat.x, b.quat.y, b.quat.z, b.quat.w);
-  physicsWorld.addBody(body);
+  addCityStatic(b.pos.x, b.pos.z, body);
 }
 
 // Landmark buildings get a rough static box collider each, so the kart can
@@ -1795,12 +1864,13 @@ LANDMARKS.forEach((l) => {
   const box = new CANNON.Body({ mass: 0, material: groundPhysMaterial });
   box.addShape(new CANNON.Box(new CANNON.Vec3(9, 6, 9)));
   box.position.set(l.x, terrainHeight(l.x, l.z) + 6, l.z);
-  physicsWorld.addBody(box);
+  addCityStatic(l.x, l.z, box);
 });
 
 const FROM_CITY = new URLSearchParams(location.search).get("from") || "nuernberg";
 const FROM_GATE = (CITY.portals || []).find((p) => p.id === FROM_CITY) || (CITY.portals || [])[0];
 const PLAYER_SPAWN = freeSpot(WORLD_DATA.cities[SPAWN_CITY]!.x + 8, WORLD_DATA.cities[SPAWN_CITY]!.z + 8);
+(window as any).__mark?.("before-stream");
 streamWorld(PLAYER_SPAWN.x, PLAYER_SPAWN.z, 999); // the countryside around the start, before the first frame
 const KART_SPAWN = IS_BAMBERG && !TER ? { x: 13, z: 19 } : IS_OVERVIEW ? { x: PLAYER_SPAWN.x + 3, z: PLAYER_SPAWN.z + 2 } : kartSpotNear(PLAYER_SPAWN); // parked beside the player, within reach (E works from 6)
 // Dimensions measured directly from the Kenney kart-oobi glTF's own accessor
@@ -2008,6 +2078,7 @@ function enterKart() {
   driving = true;
   chassisBody.velocity.setZero();
   chassisBody.angularVelocity.setZero();
+  physicsNear(player.x, player.z); // the ground under the truck exists before it lands on it
   chassisBody.position.set(player.x, groundHeight(player.x, player.z) + 1, player.z);
   chassisBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), player.rotY);
   kartSteer = 0;
@@ -2615,6 +2686,12 @@ function checkGates(t: number) {
   }
 }
 
+// names of the nearest towns out in the country (up to six), so you know where you are between the cities
+const townLabels = Array.from({ length: 6 }, () => {
+  const el = document.createElement("div"); el.className = "label3d town"; el.style.display = "none";
+  document.getElementById("labels")!.appendChild(el); return el;
+});
+let nearTowns: { name: string; x: number; z: number }[] = [];
 const landmarkLabels = LANDMARKS.map((l) => {
   const el = document.createElement("div");
   el.className = "label3d";
@@ -2849,11 +2926,15 @@ function loop(t: number) {
   if (lastT === null) lastT = t;
   const dt = Math.min(0.05, (t - lastT) / 1000);
   TER.update(dt);
+  houseBuildTick();
   if ((streamFrame = (streamFrame + 1) % 10) === 0) {
     const px = driving ? chassisBody.position.x : player.x, pz = driving ? chassisBody.position.z : player.z;
     streamWorld(px, pz, 1);
+    if (driving) physicsNear(px, pz);
     updateRegion(px, pz);
     updateDetail(px, pz);
+    nearTowns = TER.towns.map((t) => ({ t, d: Math.hypot(t.x - px, t.z - pz) })).filter((o) => o.d < 420 && !TER.cityAt(o.t.x, o.t.z))
+      .sort((a, b) => a.d - b.d).slice(0, 6).map((o) => o.t);
   }
   lastT = t;
 
@@ -3074,7 +3155,11 @@ function loop(t: number) {
   // map view looks at the whole town from ~600 up: push the fog out of the way while it's on
   // see the next city: the fog starts far out (map view pushes it further still)
   const fogFar = viewMode === "map" && !driving ? 9000 : 4200, fog = scene.fog as THREE.Fog | null;
-  if (fog && fog.far !== fogFar) { fog.far = fogFar; fog.near = fogFar === 4200 ? 700 : 4000; camera.far = Math.max(8500, fogFar + 800); camera.updateProjectionMatrix(); }
+  if (fog && fog.far !== fogFar) {
+    fog.far = fogFar; fog.near = fogFar === 4200 ? 700 : 4000; camera.far = Math.max(8500, fogFar + 800);
+    camera.near = fogFar === 4200 ? 0.5 : 5; // depth precision for a country-sized view (0.1 made land and sea flicker)
+    camera.updateProjectionMatrix();
+  }
 
   Object.keys(peers).forEach((pid) => {
     const p = peers[pid]!;
@@ -3101,6 +3186,12 @@ function loop(t: number) {
   }
 
   checkGates(t);
+  townLabels.forEach((el, i) => {
+    const tw = nearTowns[i];
+    if (!tw) { el.style.display = "none"; return; }
+    if (el.textContent !== tw.name) el.textContent = tw.name;
+    updateLabel(el, new THREE.Vector3(tw.x, terrainHeight(tw.x, tw.z) + 22, tw.z));
+  });
   LANDMARKS.forEach((l, idx) => {
     const el = landmarkLabels[idx]!;
     const got = isCollected(l);
