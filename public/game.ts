@@ -2959,9 +2959,9 @@ function loop(t: number) {
 
   if (!joined) {
     introAngle += dt * 0.06;
-    const r = 230;
-    camPos.set(-40 + Math.cos(introAngle) * r, 120, 60 + Math.sin(introAngle) * r);
-    camTarget.set(-40, 10, 60);
+    const r = 230, sc = WORLD_DATA.cities[SPAWN_CITY]!; // circle over the town you'll start in
+    camPos.set(sc.x + Math.cos(introAngle) * r, sc.y + 120, sc.z + Math.sin(introAngle) * r);
+    camTarget.set(sc.x, sc.y + 10, sc.z);
   } else if (driving) {
     // Steering eases toward the input target rather than snapping, same
     // shape as the classic RaycastVehicle demo's steer-smoothing.
