@@ -575,8 +575,8 @@ const UI_TEXT: Record<Lang, Record<string, string>> = {
     collectedPrefix: "ശേഖരിച്ചു: ",
     completeLabel: CITY.name_ml + " പൂർത്തിയായി",
     travel: "യാത്ര",
-    travelTitle: "ബവേറിയയിൽ എവിടേക്ക്?",
-    travelNote: "ഓരോ നഗരത്തിലും 125 പോയിന്റ്. എല്ലാ നഗരങ്ങളിലെയും പോയിന്റുകൾ ലീഡർബോർഡിൽ ഒന്നിച്ച്.",
+    travelTitle: "ജർമനിയിൽ എവിടേക്ക്?",
+    travelNote: "ഒരു നഗരം തൊട്ടാൽ അവിടെ എത്തും, ട്രക്കും കൂടെ വരും. ഓരോ നഗരത്തിലും 125 പോയിന്റ്.",
     travelHere: "നിങ്ങൾ ഇവിടെ",
     travelClose: "അടയ്ക്കുക",
     travelling: "യാത്ര ചെയ്യുന്നു…",
@@ -612,8 +612,8 @@ const UI_TEXT: Record<Lang, Record<string, string>> = {
     collectedPrefix: "Collected: ",
     completeLabel: CITY.name_en + " complete",
     travel: "Travel",
-    travelTitle: "Where to in Bavaria?",
-    travelNote: "125 points in every city. Points from all cities add up on the leaderboard.",
+    travelTitle: "Where to in Germany?",
+    travelNote: "Tap a place to jump there; your truck comes along. 125 points in every city.",
     travelHere: "You are here",
     travelClose: "Close",
     travelling: "Travelling…",
@@ -2398,7 +2398,7 @@ function applyLanguage() {
   document.getElementById("txtFootnote")!.textContent = tr("footnote");
   document.getElementById("txtScoreLabel")!.textContent = lang === "ml" ? CITY.name_ml : CITY.name_en;
   document.getElementById("travelToggle")!.textContent = tr("travel");
-  document.getElementById("travelToggleHero")!.textContent = "📍 " + (lang === "ml" ? CITY.name_ml : CITY.name_en) + " · " + tr("travel");
+  document.getElementById("travelToggleHero")!.textContent = "📍 " + (lang === "ml" ? (ALL_CITIES.find((c) => c.id === SPAWN_CITY)?.name_ml ?? CITY.name_ml) : (ALL_CITIES.find((c) => c.id === SPAWN_CITY)?.name_en ?? CITY.name_en)) + " · " + tr("travel");
   document.getElementById("travelTitle")!.textContent = tr("travelTitle");
   document.getElementById("travelNote")!.textContent = tr("travelNote");
   document.getElementById("travelClose")!.textContent = tr("travelClose");
@@ -2425,48 +2425,73 @@ function cityProgress(c: CityMeta): { got: number; of: number } {
   const ids = c.id === "bamberg" ? ["rathaus", "dom", "venedig", "schlenkerla", "rosengarten", "concordia", "maxplatz"] : c.landmarks.map((l) => c.id + ":" + l.id);
   return { got: ids.filter((k) => state.collected.indexOf(k) !== -1).length, of: ids.length };
 }
+// Quick travel within the one big map: a map of Germany (cities, motorways, where you are); tap a city or a sight to
+// jump there -- the truck comes along and the town is built before you arrive.
+const TRAVEL_CITIES = () => ALL_CITIES.filter((c) => WORLD_DATA.cities[c.id]);
 function renderTravel() {
   const svg = document.getElementById("travelMap")!;
-  const outline = bavariaOutline as number[][];
-  const lats = outline.map((p) => p[0]!), lons = outline.map((p) => p[1]!);
-  const k = Math.cos(49 * Math.PI / 180);
-  const minX = Math.min(...lons) * k, maxX = Math.max(...lons) * k, minY = Math.min(...lats), maxY = Math.max(...lats);
-  const W = 640, H = 520, pad = 18;
-  const sc = Math.min((W - 2 * pad) / (maxX - minX), (H - 2 * pad) / (maxY - minY));
-  const px = (lat: number, lon: number) => [pad + (lon * k - minX) * sc, pad + (maxY - lat) * sc];
-  const path = outline.map((p, i) => { const [x, y] = px(p[0]!, p[1]!); return (i ? "L" : "M") + x!.toFixed(1) + "," + y!.toFixed(1); }).join("") + "Z";
-  const pts = ALL_CITIES.map((c) => ({ c, xy: px(c.latlon[0]!, c.latlon[1]!) }));
-  const order = ["wuerzburg", "bamberg", "erlangen", "nuernberg", "regensburg", "muenchen", "augsburg"]; // a rail loop
-  const rail = order.map((id, i) => { const p = pts.find((q) => q.c.id === id)!.xy; return (i ? "L" : "M") + p[0]!.toFixed(1) + "," + p[1]!.toFixed(1); }).join("");
+  const out = WORLD_DATA.outline;
+  const xs = out.map((p) => p[0]!), zs = out.map((p) => p[1]!);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const W = 520, H = 640, pad = 16, sc = Math.min((W - 2 * pad) / (maxX - minX), (H - 2 * pad) / (maxZ - minZ));
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const P = (x: number, z: number) => [pad + (x - minX) * sc, pad + (z - minZ) * sc] as const;
+  const line = (pts: number[][], close = false) => pts.map((p, i) => { const [x, y] = P(p[0]!, p[1]!); return (i ? "L" : "M") + x.toFixed(1) + "," + y.toFixed(1); }).join("") + (close ? "Z" : "");
   const name = (c: CityMeta) => (lang === "ml" ? c.name_ml : c.name_en);
-  svg.innerHTML = `<path class="land" d="${path}"/><path class="rail" d="${rail}"/>` + pts.map(({ c, xy }) => {
-    const p = cityProgress(c), here = c.id === CITY_ID;
-    // close neighbours (Würzburg/Bamberg, Erlangen/Nürnberg) put their labels on opposite sides
-    const right = ({ wuerzburg: false, nuernberg: false, augsburg: false } as Record<string, boolean>)[c.id] ?? xy[0]! < W - 150;
-    const dy = ({ nuernberg: 14, erlangen: -8, bamberg: -8, wuerzburg: 10 } as Record<string, number>)[c.id] ?? 0;
-    return `<g class="city${here ? " here" : ""}" data-city="${c.id}" tabindex="0" role="button" aria-label="${name(c)}">
-      <circle cx="${xy[0]}" cy="${xy[1]}" r="8"/>
-      <text x="${xy[0]! + (right ? 14 : -14)}" y="${xy[1]! - 2 + dy}" text-anchor="${right ? "start" : "end"}">${name(c)}</text>
-      <text class="sub" x="${xy[0]! + (right ? 14 : -14)}" y="${xy[1]! + 14 + dy}" text-anchor="${right ? "start" : "end"}">${here ? tr("travelHere") + " · " : ""}${p.got}/${p.of}</text></g>`;
+  const here = TER.cityAt(player.x, player.z)?.id;
+  const roads = WORLD_DATA.motorways.map((m) => `<path class="rail" d="${line(m.line)}"/>`).join("");
+  const cities = TRAVEL_CITIES().map((c) => {
+    const w = WORLD_DATA.cities[c.id]!, [x, y] = P(w.x, w.z), p = cityProgress(c), right = x < W - 120;
+    return `<g class="city${c.id === here ? " here" : ""}" data-city="${c.id}" tabindex="0" role="button" aria-label="${name(c)}">
+      <circle cx="${x}" cy="${y}" r="7"/>
+      <text x="${x + (right ? 10 : -10)}" y="${y + 5}" text-anchor="${right ? "start" : "end"}">${name(c)} <tspan class="sub">${p.got}/${p.of}</tspan></text></g>`;
   }).join("");
-  document.getElementById("travelList")!.innerHTML = `<button class="chip road" data-city="bayern" type="button"${IS_OVERVIEW ? ' aria-current="true"' : ""}>${tr("roadTrip")}</button>` + ALL_CITIES.map((c) => {
+  const sights = LANDMARKS.filter((l) => l.city === "bayern").map((l) => {
+    const [x, y] = P(l.x, l.z);
+    return `<g class="city sight" data-sight="${l.id}" tabindex="0" role="button" aria-label="${tl(l).label}"><circle cx="${x}" cy="${y}" r="4"/></g>`;
+  }).join("");
+  const [mx, my] = P(player.x, player.z);
+  svg.innerHTML = `<path class="land" d="${line(out, true)}"/>${roads}${sights}${cities}<circle class="me" cx="${mx}" cy="${my}" r="5"/>`;
+  document.getElementById("travelList")!.innerHTML = TRAVEL_CITIES().map((c) => {
     const p = cityProgress(c);
-    return `<button class="chip" data-city="${c.id}" type="button"${c.id === CITY_ID ? ' aria-current="true"' : ""}>${name(c)} · ${p.got}/${p.of}</button>`;
-  }).join("");
+    return `<button class="chip" data-city="${c.id}" type="button"${c.id === here ? ' aria-current="true"' : ""}>${name(c)} · ${p.got}/${p.of}</button>`;
+  }).join("") + LANDMARKS.filter((l) => l.city === "bayern").map((l) =>
+    `<button class="chip road" data-sight="${l.id}" type="button">${isCollected(l) ? "✓ " : ""}${tl(l).label}</button>`).join("");
+}
+/** Jump to a city (or a Bavarian sight) on the big map, truck alongside. */
+function travelTo(x: number, z: number, label: string, city?: string) {
+  document.getElementById("travel")!.hidden = true;
+  if (driving) exitKart();
+  moveTarget = null;
+  if (city) buildCityHouses(city); // the town is complete when you arrive
+  streamWorld(x, z, 999);
+  const spot = freeSpot(x, z);
+  player.x = spot.x; player.z = spot.z;
+  const k = kartSpotNear(spot);
+  chassisBody.velocity.setZero(); chassisBody.angularVelocity.setZero();
+  chassisBody.position.set(k.x, groundHeight(k.x, k.z) + 1, k.z);
+  kartGroup.position.set(k.x, groundHeight(k.x, k.z), k.z);
+  camGroundY = NaN; camPos.set(player.x, groundHeight(player.x, player.z) + 20, player.z + 20);
+  if (city) { try { localStorage.setItem("littleBamberg.city", city); } catch (e) {} }
+  showToast({ label: tr("travelling"), flavor: label, points: 0 });
 }
 function goToCity(id: string) {
-  if (id === CITY_ID) { document.getElementById("travel")!.hidden = true; return; }
-  try { localStorage.setItem("littleBamberg.city", id); } catch (e) {}
-  document.getElementById("travelNote")!.textContent = tr("travelling");
-  location.search = "?city=" + encodeURIComponent(id) + (id === "bayern" ? "&from=" + encodeURIComponent(IS_OVERVIEW ? FROM_CITY : CITY_ID) : "");
+  const w = WORLD_DATA.cities[id], c = ALL_CITIES.find((m) => m.id === id);
+  if (!w || !c) return;
+  travelTo(w.x + 8, w.z + 8, lang === "ml" ? c.name_ml : c.name_en, id);
+}
+function goToSight(id: string) {
+  const l = LANDMARKS.find((m) => m.id === id); if (!l) return;
+  travelTo(l.x + 38, l.z + 38, tl(l).label);
 }
 function openTravel() { renderTravel(); document.getElementById("travel")!.hidden = false; }
 document.getElementById("travelToggle")!.addEventListener("click", openTravel);
 document.getElementById("travelToggleHero")!.addEventListener("click", openTravel);
 document.getElementById("travelClose")!.addEventListener("click", () => { document.getElementById("travel")!.hidden = true; });
 document.getElementById("travel")!.addEventListener("click", (e) => {
-  const t = (e.target as Element).closest("[data-city]");
-  if (t) goToCity(t.getAttribute("data-city")!);
+  const t = (e.target as Element).closest("[data-city],[data-sight]");
+  if (t?.hasAttribute("data-sight")) goToSight(t.getAttribute("data-sight")!);
+  else if (t) goToCity(t.getAttribute("data-city")!);
   else if (e.target === e.currentTarget) document.getElementById("travel")!.hidden = true;
 });
 document.getElementById("travel")!.addEventListener("keydown", (e) => {
@@ -2745,7 +2770,6 @@ function showToast(entry: { label: string; flavor: string; points: number }) {
 }
 
 // ================= Resize =================
-for (const id of ["travelToggle", "travelToggleHero"]) { const el = document.getElementById(id); if (el) el.style.display = "none"; } // one map: no travelling between pages
 let streamFrame = 0, regionName = "";
 /** HUD: the city (or nearby town) you are in; remembered as the next start. */
 function updateRegion(px: number, pz: number) {
