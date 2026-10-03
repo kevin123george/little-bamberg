@@ -29,6 +29,31 @@ CACHE = Path(os.environ.get("DGM_CACHE", ROOT / ".cache" / "dgm"))
 M_PER_UNIT = 2.2
 STEP, HALF = 4, 296
 N = HALF * 2 // STEP + 1
+SAMPLE = None  # (x, z, r) -> metres; set per city in build()
+BAVARIAN = {"bamberg", "muenchen", "nuernberg", "wuerzburg", "regensburg", "erlangen", "augsburg"}
+_t14 = {}
+
+
+def terrarium(lat, lon, z=14):
+    """Ground height from the AWS Terrain Tiles (Terrarium), bilinear, for cities outside Bavaria (no DGM1 there)."""
+    n = 2 ** z
+    x = (lon + 180) / 360 * n * 256 - 0.5
+    y = (1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * n * 256 - 0.5
+    x0, y0 = math.floor(x), math.floor(y)
+    def px(ix, iy):
+        tx, ty = ix // 256, iy // 256
+        if (tx, ty) not in _t14:
+            CACHE.mkdir(parents=True, exist_ok=True)
+            f = CACHE / f"terrarium-{z}-{tx}-{ty}.png"
+            if not f.exists():
+                r = requests.get(f"https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{tx}/{ty}.png", timeout=60)
+                r.raise_for_status(); f.write_bytes(r.content)
+            from PIL import Image
+            a = np.asarray(Image.open(f).convert("RGB"), dtype=np.float64)
+            _t14[(tx, ty)] = a[:, :, 0] * 256 + a[:, :, 1] + a[:, :, 2] / 256 - 32768
+        return _t14[(tx, ty)][iy % 256, ix % 256]
+    fx, fy = x - x0, y - y0
+    return float((px(x0, y0) * (1 - fx) + px(x0 + 1, y0) * fx) * (1 - fy) + (px(x0, y0 + 1) * (1 - fx) + px(x0 + 1, y0 + 1) * fx) * fy)
 CENTERS = {"bamberg": (49.89168, 10.88681)}  # Bamberg's map predates cities.json: its origin is the Altes Rathaus centroid (fitted to the OSM water)
 MAPS = {"bamberg": ROOT / "public" / "bamberg-map-data.json"}
 
@@ -90,14 +115,19 @@ def overpass(ql):
     cached = CACHE / f"overpass-{hashlib.sha1(ql.encode()).hexdigest()[:16]}.json"
     if cached.exists():
         return json.loads(cached.read_text())
-    for attempt in range(6):
-        r = requests.post("https://overpass-api.de/api/interpreter", data={"data": ql}, timeout=180,
-                          headers={"User-Agent": "little-bamberg/1.0 (personal game; map data from OpenStreetMap)"})
-        if r.ok:
+    mirrors = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
+               "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
+    for attempt in range(16):
+        try:
+            r = requests.post(mirrors[attempt % 4], data={"data": ql}, timeout=240,
+                              headers={"User-Agent": "little-bamberg/1.0 (personal game; map data from OpenStreetMap)"})
+        except requests.RequestException:
+            continue
+        if r.ok and r.headers.get("content-type", "").startswith("application/json"):
             CACHE.mkdir(parents=True, exist_ok=True)
             cached.write_text(json.dumps(r.json()["elements"]))
             return r.json()["elements"]
-        time.sleep(20 * (attempt + 1))
+        time.sleep(8 * (attempt // 4 + 1))
     raise RuntimeError(f"Overpass failed: {r.status_code}")
 
 
@@ -178,7 +208,7 @@ def water_and_bridges(lat0, lon0, to_utm, base):
         if not pts:
             pts = [(sum(p[0] for p in r) / len(r), sum(p[1] for p in r) / len(r)) for r in rings]
         pts = pts[:: max(1, len(pts) // 300)]
-        return round(float(np.nanpercentile([height(*to_utm(x, z), r=2) for x, z in pts], 25)) - base, 2)
+        return round(float(np.nanpercentile([SAMPLE(x, z, 2) for x, z in pts], 25)) - base, 2)
 
     for outer, inner in areas:
         rings = [c for c in (clip(r, HALF) for r in outer) if len(c) >= 3]
@@ -196,7 +226,7 @@ def water_and_bridges(lat0, lon0, to_utm, base):
             if p is not None and abs(p[0]) <= HALF + 10 and abs(p[1]) <= HALF + 10 and not in_area(*p):
                 run.append(p)
             elif len(run) >= 2:
-                water.append({"line": run, "half_w": 5 if kind == "river" else 7, "level": round(float(np.nanpercentile([height(*to_utm(x, z), r=2) for x, z in run], 25)) - base, 2)})
+                water.append({"line": run, "half_w": 5 if kind == "river" else 7, "level": round(float(np.nanpercentile([SAMPLE(x, z, 2) for x, z in run], 25)) - base, 2)})
                 run = []
             else:
                 run = []
@@ -223,16 +253,22 @@ def water_and_bridges(lat0, lon0, to_utm, base):
     return water, bridges
 
 
-def build(cid, lat0, lon0, map_path):
+def build(cid, lat0, lon0, map_path, half=296):
+    global HALF, N, SAMPLE
+    HALF = half; N = HALF * 2 // STEP + 1
     F = 1 / M_PER_UNIT
     kx, kz = 111320 * math.cos(math.radians(lat0)) * F, 110574 * F
     to_utm = lambda x, z: utm32(lat0 - z / kz, lon0 + x / kx)
+    if cid in BAVARIAN:
+        SAMPLE = lambda x, z, r=4: height(*to_utm(x, z), r=r)
+    else:  # Terrarium is ~6 m per pixel here: average a few samples like the 1 m DGM windows
+        SAMPLE = lambda x, z, r=4: float(np.mean([terrarium(lat0 - (z + dz) / kz, lon0 + (x + dx) / kx) for dx in (-1, 1) for dz in (-1, 1)]))
     grid = np.zeros((N, N), np.float32)  # [row = z index][col = x index]
     for iz in range(N):
         for ix in range(N):
-            grid[iz, ix] = height(*to_utm(-HALF + ix * STEP, -HALF + iz * STEP))
+            grid[iz, ix] = SAMPLE(-HALF + ix * STEP, -HALF + iz * STEP, 4)
     river = json.loads(map_path.read_text()).get("river_polyline") or []
-    on_river = [height(*to_utm(x, z), r=6) for x, z in river if abs(x) < HALF and abs(z) < HALF]
+    on_river = [SAMPLE(x, z, 6) for x, z in river if abs(x) < HALF and abs(z) < HALF]
     base = float(np.median(on_river)) if on_river else float(np.nanpercentile(grid, 10))
     rel = np.round(grid - base, 1)
     water, bridges = water_and_bridges(lat0, lon0, to_utm, base)
@@ -254,5 +290,5 @@ if __name__ == "__main__":
     ids = sys.argv[1:] or ["bamberg", *cities]
     for cid in ids:
         lat0, lon0 = CENTERS.get(cid) or cities[cid]["center"]
-        build(cid, lat0, lon0, MAPS.get(cid, ROOT / "public" / "maps" / f"{cid}.json"))
+        build(cid, lat0, lon0, MAPS.get(cid, ROOT / "public" / "maps" / f"{cid}.json"), (cities.get(cid) or {}).get("half", 290) + 6)
         _tiles.clear()

@@ -54,6 +54,19 @@ function topPlayers(limit: number) {
 const ROOM_TOPIC = "presence";
 type ClientMsg = { type: "presence"; x: number; z: number; rotY: number; name: string; city?: string };
 
+// The map data (world, city maps, terrain: ~5 MB of JSON) goes out gzipped (~5x smaller), compressed once per file version.
+const gzCache = new Map<string, { mtime: number; body: Buffer }>();
+async function jsonFile(path: string, req: Request): Promise<Response> {
+  const f = Bun.file(path);
+  if (!(await f.exists())) return new Response("Not found", { status: 404 });
+  const headers: Record<string, string> = { "Content-Type": "application/json", "Cache-Control": "no-cache" };
+  if (req.method === "HEAD") return new Response(null, { headers });
+  if (!(req.headers.get("accept-encoding") || "").includes("gzip")) return new Response(f, { headers });
+  let c = gzCache.get(path);
+  if (!c || c.mtime !== f.lastModified) { c = { mtime: f.lastModified, body: Buffer.from(Bun.gzipSync(new Uint8Array(await f.arrayBuffer()))) }; gzCache.set(path, c); }
+  return new Response(c.body as unknown as BodyInit, { headers: { ...headers, "Content-Encoding": "gzip" } });
+}
+
 const server = Bun.serve<{ id: string }>({
   port: PORT,
   routes: {
@@ -63,10 +76,15 @@ const server = Bun.serve<{ id: string }>({
   async fetch(req, server) {
     const url = new URL(req.url);
 
+    // one Germany: the world layout and every city's map
+    const data = url.pathname.match(/^\/(world|maps)\/([a-z-]+)\.json$/);
+    if (data) {
+      const file = data[2] === "bamberg-map-data" ? join(import.meta.dir, "public", "bamberg-map-data.json") : join(import.meta.dir, "public", data[1]!, data[2] + ".json");
+      return jsonFile(file, req);
+    }
     const terrain = url.pathname.match(/^\/terrain\/([a-z]+)\.json$/); // real ground, water and bridges per city
     if (terrain) {
-      const f = Bun.file(join(import.meta.dir, "public", "terrain", terrain[1] + ".json"));
-      return (await f.exists()) ? new Response(f, { headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" } }) : new Response("Not found", { status: 404 });
+      return jsonFile(join(import.meta.dir, "public", "terrain", terrain[1] + ".json"), req);
     }
     if (url.pathname === "/ws") {
       const id = crypto.randomUUID();

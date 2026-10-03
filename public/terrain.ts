@@ -19,7 +19,7 @@ const CLEAR = 1.7;  // bridge deck at least this far above the water
 
 export type Terrain = ReturnType<typeof buildTerrain>;
 
-export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }) {
+export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture; edgeTo?: (x: number, z: number) => number; skirt?: boolean }) {
   const toU = (m: number) => (m / td.m_per_unit) * VEX;
   const half = td.half, N = Math.round((half * 2) / FINE) + 1;
   const idx = (ix: number, iz: number) => iz * N + ix;
@@ -66,26 +66,52 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
     }
     return c;
   };
+  // Wet cells: polygons by a scanline fill (row by row, crossings sorted, even-odd), river lines by their segments.
   for (const f of td.water) {
     const level = toU(f.level);
-    const pts = "rings" in f ? f.rings.flat() : f.line;
-    const pad = BANK + 1 + ("half_w" in f ? f.half_w : 0);
-    const x0 = Math.min(...pts.map((p) => p[0]!)) - pad, x1 = Math.max(...pts.map((p) => p[0]!)) + pad;
-    const z0 = Math.min(...pts.map((p) => p[1]!)) - pad, z1 = Math.max(...pts.map((p) => p[1]!)) + pad;
-    for (let iz = Math.max(0, Math.floor((z0 + half) / FINE)); iz <= Math.min(N - 1, Math.ceil((z1 + half) / FINE)); iz++)
-      for (let ix = Math.max(0, Math.floor((x0 + half) / FINE)); ix <= Math.min(N - 1, Math.ceil((x1 + half) / FINE)); ix++) {
-        const x = -half + ix * FINE, z = -half + iz * FINE, k = idx(ix, iz);
-        let inside: boolean, d = Infinity;
-        if ("rings" in f) {
-          inside = f.rings.some((r) => inRing(x, z, r)) && !f.holes.some((r) => inRing(x, z, r));
-          if (!inside) for (const r of [...f.rings, ...f.holes]) for (let i = 0, j = r.length - 1; i < r.length; j = i++) d = Math.min(d, segDist(x, z, r[j]!, r[i]!));
-        } else {
-          for (let i = 0; i < f.line.length - 1; i++) d = Math.min(d, segDist(x, z, f.line[i]!, f.line[i + 1]!));
-          d -= f.half_w; inside = d <= 0;
+    if ("rings" in f) {
+      const rings = [...f.rings, ...f.holes];
+      for (let iz = 0; iz < N; iz++) {
+        const z = -half + iz * FINE, xs: number[] = [];
+        for (const r of rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+          const zi = r[i]![1]!, zj = r[j]![1]!;
+          if ((zi > z) !== (zj > z)) xs.push(r[i]![0]! + ((z - zi) / (zj - zi)) * (r[j]![0]! - r[i]![0]!));
         }
-        if (inside) { if (isNaN(wl[k]!)) wl[k] = level; wd[k] = 0; }
-        else if (d < wd[k]!) { wd[k] = d; wnear[k] = level; }
+        xs.sort((p, q) => p - q);
+        for (let i = 0; i + 1 < xs.length; i += 2)
+          for (let ix = Math.max(0, Math.ceil((xs[i]! + half) / FINE)); ix <= Math.min(N - 1, Math.floor((xs[i + 1]! + half) / FINE)); ix++) {
+            const k = idx(ix, iz); if (isNaN(wl[k]!)) wl[k] = level;
+          }
       }
+    } else {
+      for (let i = 0; i < f.line.length - 1; i++) {
+        const a = f.line[i]!, b = f.line[i + 1]!, hw = f.half_w;
+        for (let iz = Math.max(0, Math.floor((Math.min(a[1]!, b[1]!) - hw + half) / FINE)); iz <= Math.min(N - 1, Math.ceil((Math.max(a[1]!, b[1]!) + hw + half) / FINE)); iz++)
+          for (let ix = Math.max(0, Math.floor((Math.min(a[0]!, b[0]!) - hw + half) / FINE)); ix <= Math.min(N - 1, Math.ceil((Math.max(a[0]!, b[0]!) + hw + half) / FINE)); ix++) {
+            const k = idx(ix, iz);
+            if (isNaN(wl[k]!) && segDist(-half + ix * FINE, -half + iz * FINE, a, b) <= hw) wl[k] = level;
+          }
+      }
+    }
+  }
+  // Distance from every dry cell to the nearest wet one (and that water's level): a two-pass chamfer transform over the
+  // grid -- linear time, instead of measuring every cell against every shore edge (that took seconds per city).
+  {
+    const D = new Float32Array(N * N).fill(1e9);
+    for (let k = 0; k < N * N; k++) if (!isNaN(wl[k]!)) { D[k] = 0; wnear[k] = wl[k]!; }
+    const S2 = Math.SQRT2;
+    const relax = (k: number, n: number, w: number) => { if (D[n]! + w < D[k]!) { D[k] = D[n]! + w; wnear[k] = wnear[n]!; } };
+    for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) {
+      const k = idx(ix, iz);
+      if (ix > 0) relax(k, k - 1, 1);
+      if (iz > 0) { relax(k, k - N, 1); if (ix > 0) relax(k, k - N - 1, S2); if (ix < N - 1) relax(k, k - N + 1, S2); }
+    }
+    for (let iz = N - 1; iz >= 0; iz--) for (let ix = N - 1; ix >= 0; ix--) {
+      const k = idx(ix, iz);
+      if (ix < N - 1) relax(k, k + 1, 1);
+      if (iz < N - 1) { relax(k, k + N, 1); if (ix < N - 1) relax(k, k + N + 1, S2); if (ix > 0) relax(k, k + N - 1, S2); }
+    }
+    for (let k = 0; k < N * N; k++) wd[k] = D[k]! === 0 ? 0 : Math.min(99, Math.max(0.01, D[k]! * FINE - FINE / 2));
   }
   // carve the beds, keep the banks just above the water
   for (let k = 0; k < N * N; k++) {
@@ -93,6 +119,16 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
     else if (wd[k]! < BANK) hg[k] = Math.max(hg[k]!, wnear[k]! + 0.35);
   }
 
+  // in the one big map: the outer band of the city blends into the countryside height, so there is no seam
+  if (opts.edgeTo) {
+    const BAND = 48;
+    for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) {
+      const x = -half + ix * FINE, z = -half + iz * FINE, b = half - Math.max(Math.abs(x), Math.abs(z));
+      if (b >= BAND) continue;
+      const u = Math.max(0, b / BAND), t = u * u * (3 - 2 * u), k = idx(ix, iz);
+      hg[k] = opts.edgeTo(x, z) + (hg[k]! - opts.edgeTo(x, z)) * t;
+    }
+  }
   const cell = (x: number, z: number) => {
     const ix = Math.max(0, Math.min(N - 1, Math.round((x + half) / FINE))), iz = Math.max(0, Math.min(N - 1, Math.round((z + half) / FINE)));
     return idx(ix, iz);
@@ -147,6 +183,7 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
 
   // ---- diorama edge: the map is a slab of earth, cut clean at the border (water shows in the cut too)
   const bottom = minH - 5;
+  if (opts.skirt !== false) {
   const skirt: number[] = [], skirtCol: number[] = [];
   const cSoil = new THREE.Color("#9b7652"), cSoilDeep = new THREE.Color("#6d4f36"), cCut = new THREE.Color("#4f9fd0");
   const quad = (ax: number, az: number, ay0: number, ay1: number, bx: number, bz: number, by0: number, by1: number, c0: THREE.Color, c1: THREE.Color) => {
@@ -168,6 +205,7 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
   skirtGeo.setAttribute("color", new THREE.Float32BufferAttribute(skirtCol, 3));
   skirtGeo.computeVertexNormals();
   group.add(new THREE.Mesh(skirtGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide })));
+  }
 
   // ---- water surfaces: flat at their own level, slightly see-through, with drifting ripples and a foam line
   const waveTex = (() => {
@@ -321,8 +359,8 @@ export function buildTerrain(td: TerrainData, opts: { grassMap?: THREE.Texture }
       physBoxes.push({ pos: mid.add(new THREE.Vector3(0, -0.3, 0).applyQuaternion(quat)), quat, half: new THREE.Vector3(len / 2 + 0.1, 0.3, hw) });
     }
     // ... then the deck and the parapets as a chain of thin boxes, every ~3 units
-    for (let i = 0; i < M - 1; i += 3) {
-      const j = Math.min(M - 1, i + 3);
+    for (let i = 0; i < M - 1; i += 5) { // a box every 5 units (fewer bodies; the deck is gently curved)
+      const j = Math.min(M - 1, i + 5);
       const dx = xs[j]! - xs[i]!, dz = zs[j]! - zs[i]!, dy = deck[j]! - deck[i]!, L = Math.hypot(dx, dz);
       if (L < 0.2) continue;
       const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -Math.atan2(dz, dx), Math.atan2(dy, L), "YZX"));

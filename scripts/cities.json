@@ -1,74 +1,1776 @@
 {
-  "muenchen": {
-    "name_en": "München", "name_ml": "മ്യൂണിക്ക്", "center": [48.1374, 11.5755], "river": null,
-    "landmarks": [
-      {"id": "neues_rathaus", "osm": "r147095", "kind": "townhall", "points": 25, "en": ["Neues Rathaus", "The town hall with the famous Glockenspiel."], "ml": ["നോയസ് റാത്ത്ഹൗസ്", "പ്രസിദ്ധമായ ഗ്ലോക്കൻഷ്പീൽ ഉള്ള നഗരസഭാ മന്ദിരം."]},
-      {"id": "frauenkirche", "osm": "w225698612", "kind": "church2", "points": 25, "en": ["Frauenkirche", "Munich's cathedral with its two domed towers."], "ml": ["ഫ്രൗവൻകിർഹെ", "താഴികക്കുടമുള്ള രണ്ട് ഗോപുരങ്ങളുള്ള മ്യൂണിക്കിലെ കത്തീഡ്രൽ."]},
-      {"id": "peterskirche", "osm": "w228534603", "kind": "church", "points": 15, "en": ["St. Peter", "Munich's oldest parish church."], "ml": ["സെന്റ് പീറ്റർ", "മ്യൂണിക്കിലെ ഏറ്റവും പഴയ ഇടവക പള്ളി."]},
-      {"id": "altes_rathaus", "osm": "w4054817", "kind": "tower", "points": 10, "en": ["Altes Rathaus", "The old town hall at the end of Marienplatz."], "ml": ["ആൽട്ടെസ് റാത്ത്ഹൗസ്", "മരിയൻപ്ലാറ്റ്സിന്റെ അറ്റത്തുള്ള പഴയ നഗരസഭ."]},
-      {"id": "viktualienmarkt", "osm": "w240014249", "kind": "square", "points": 20, "en": ["Viktualienmarkt", "Munich's famous food market."], "ml": ["വിക്ടുവാലിയൻമാർക്ട്", "മ്യൂണിക്കിലെ പ്രസിദ്ധമായ ഭക്ഷണച്ചന്ത."]},
-      {"id": "hofbraeuhaus", "osm": "w115852172", "kind": "building", "points": 20, "en": ["Hofbräuhaus", "The world-famous beer hall."], "ml": ["ഹോഫ്ബ്രോയ്ഹൗസ്", "ലോകപ്രസിദ്ധമായ ബിയർ ഹാൾ."]},
-      {"id": "feldherrnhalle", "osm": "w25505402", "kind": "building", "points": 10, "en": ["Feldherrnhalle", "An open hall guarded by two stone lions."], "ml": ["ഫെൽഡ്ഹെർൺഹാലെ", "രണ്ട് കൽസിംഹങ്ങൾ കാക്കുന്ന തുറന്ന മണ്ഡപം."]}
+ "muenchen": {
+  "name_en": "München",
+  "name_ml": "മ്യൂണിക്ക്",
+  "center": [
+   48.1374,
+   11.5755
+  ],
+  "river": null,
+  "landmarks": [
+   {
+    "id": "neues_rathaus",
+    "osm": "r147095",
+    "kind": "townhall",
+    "points": 25,
+    "en": [
+     "Neues Rathaus",
+     "The town hall with the famous Glockenspiel."
+    ],
+    "ml": [
+     "നോയസ് റാത്ത്ഹൗസ്",
+     "പ്രസിദ്ധമായ ഗ്ലോക്കൻഷ്പീൽ ഉള്ള നഗരസഭാ മന്ദിരം."
     ]
+   },
+   {
+    "id": "frauenkirche",
+    "osm": "w225698612",
+    "kind": "church2",
+    "points": 25,
+    "en": [
+     "Frauenkirche",
+     "Munich's cathedral with its two domed towers."
+    ],
+    "ml": [
+     "ഫ്രൗവൻകിർഹെ",
+     "താഴികക്കുടമുള്ള രണ്ട് ഗോപുരങ്ങളുള്ള മ്യൂണിക്കിലെ കത്തീഡ്രൽ."
+    ]
+   },
+   {
+    "id": "peterskirche",
+    "osm": "w228534603",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "St. Peter",
+     "Munich's oldest parish church."
+    ],
+    "ml": [
+     "സെന്റ് പീറ്റർ",
+     "മ്യൂണിക്കിലെ ഏറ്റവും പഴയ ഇടവക പള്ളി."
+    ]
+   },
+   {
+    "id": "altes_rathaus",
+    "osm": "w4054817",
+    "kind": "tower",
+    "points": 10,
+    "en": [
+     "Altes Rathaus",
+     "The old town hall at the end of Marienplatz."
+    ],
+    "ml": [
+     "ആൽട്ടെസ് റാത്ത്ഹൗസ്",
+     "മരിയൻപ്ലാറ്റ്സിന്റെ അറ്റത്തുള്ള പഴയ നഗരസഭ."
+    ]
+   },
+   {
+    "id": "viktualienmarkt",
+    "osm": "w240014249",
+    "kind": "square",
+    "points": 20,
+    "en": [
+     "Viktualienmarkt",
+     "Munich's famous food market."
+    ],
+    "ml": [
+     "വിക്ടുവാലിയൻമാർക്ട്",
+     "മ്യൂണിക്കിലെ പ്രസിദ്ധമായ ഭക്ഷണച്ചന്ത."
+    ]
+   },
+   {
+    "id": "hofbraeuhaus",
+    "osm": "w115852172",
+    "kind": "building",
+    "points": 20,
+    "en": [
+     "Hofbräuhaus",
+     "The world-famous beer hall."
+    ],
+    "ml": [
+     "ഹോഫ്ബ്രോയ്ഹൗസ്",
+     "ലോകപ്രസിദ്ധമായ ബിയർ ഹാൾ."
+    ]
+   },
+   {
+    "id": "feldherrnhalle",
+    "osm": "w25505402",
+    "kind": "building",
+    "points": 10,
+    "en": [
+     "Feldherrnhalle",
+     "An open hall guarded by two stone lions."
+    ],
+    "ml": [
+     "ഫെൽഡ്ഹെർൺഹാലെ",
+     "രണ്ട് കൽസിംഹങ്ങൾ കാക്കുന്ന തുറന്ന മണ്ഡപം."
+    ]
+   }
+  ]
+ },
+ "nuernberg": {
+  "name_en": "Nürnberg",
+  "name_ml": "ന്യൂറംബർഗ്",
+  "center": [
+   49.45369,
+   11.07734
+  ],
+  "river": {
+   "name": "Pegnitz",
+   "half_width": 7
   },
-  "nuernberg": {
-    "name_en": "Nürnberg", "name_ml": "ന്യൂറംബർഗ്", "center": [49.45369, 11.07734], "river": {"name": "Pegnitz", "half_width": 7},
-    "hills": [{"at": [49.45808, 11.07539], "r": 95, "h": 16}],
-    "landmarks": [
-      {"id": "hauptmarkt", "osm": "w136698909", "kind": "square", "points": 15, "en": ["Hauptmarkt", "The main square, home of the Christmas market."], "ml": ["ഹൗപ്റ്റ്മാർക്ട്", "ക്രിസ്മസ് ചന്ത നടക്കുന്ന പ്രധാന ചത്വരം."]},
-      {"id": "schoener_brunnen", "osm": "n1499315172", "kind": "fountain", "points": 20, "en": ["Schöner Brunnen", "The Beautiful Fountain: turn the brass ring for luck."], "ml": ["ഷ്യോണർ ബ്രുന്നൻ", "ഭാഗ്യത്തിനായി പിച്ചള വളയം തിരിക്കുന്ന 'സുന്ദര ജലധാര'."]},
-      {"id": "frauenkirche", "osm": "w143415043", "kind": "church", "points": 15, "en": ["Frauenkirche", "Its clock puts on a little show every day at noon."], "ml": ["ഫ്രൗവൻകിർഹെ", "എല്ലാ ദിവസവും ഉച്ചയ്ക്ക് ക്ലോക്കിൽ ചെറിയൊരു പ്രദർശനം."]},
-      {"id": "sebald", "osm": "w139460727", "kind": "church2", "points": 15, "en": ["St. Sebald", "One of the oldest churches in the city."], "ml": ["സെന്റ് സെബാൾഡ്", "നഗരത്തിലെ ഏറ്റവും പഴയ പള്ളികളിൽ ഒന്ന്."]},
-      {"id": "lorenz", "osm": "w144721691", "kind": "church2", "points": 20, "en": ["St. Lorenz", "A big Gothic church with two towers."], "ml": ["സെന്റ് ലോറൻസ്", "രണ്ട് ഗോപുരങ്ങളുള്ള വലിയ ഗോഥിക് പള്ളി."]},
-      {"id": "kaiserburg", "osm": "n31013768", "kind": "castle", "points": 25, "en": ["Kaiserburg", "The emperors' castle on the rock above the old town."], "ml": ["കൈസർബുർഗ്", "പഴയ നഗരത്തിന് മുകളിൽ പാറയിലുള്ള ചക്രവർത്തിമാരുടെ കോട്ട."]},
-      {"id": "duerer", "osm": "w32477251", "kind": "building", "points": 15, "en": ["Albrecht-Dürer-Haus", "The house where the painter Albrecht Dürer lived."], "ml": ["ഡ്യൂറർ ഹൗസ്", "ചിത്രകാരൻ ആൽബ്രെഹ്റ്റ് ഡ്യൂറർ താമസിച്ച വീട്."]}
+  "hills": [
+   {
+    "at": [
+     49.45808,
+     11.07539
+    ],
+    "r": 95,
+    "h": 16
+   }
+  ],
+  "landmarks": [
+   {
+    "id": "hauptmarkt",
+    "osm": "w136698909",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Hauptmarkt",
+     "The main square, home of the Christmas market."
+    ],
+    "ml": [
+     "ഹൗപ്റ്റ്മാർക്ട്",
+     "ക്രിസ്മസ് ചന്ത നടക്കുന്ന പ്രധാന ചത്വരം."
     ]
+   },
+   {
+    "id": "schoener_brunnen",
+    "osm": "n1499315172",
+    "kind": "fountain",
+    "points": 20,
+    "en": [
+     "Schöner Brunnen",
+     "The Beautiful Fountain: turn the brass ring for luck."
+    ],
+    "ml": [
+     "ഷ്യോണർ ബ്രുന്നൻ",
+     "ഭാഗ്യത്തിനായി പിച്ചള വളയം തിരിക്കുന്ന 'സുന്ദര ജലധാര'."
+    ]
+   },
+   {
+    "id": "frauenkirche",
+    "osm": "w143415043",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "Frauenkirche",
+     "Its clock puts on a little show every day at noon."
+    ],
+    "ml": [
+     "ഫ്രൗവൻകിർഹെ",
+     "എല്ലാ ദിവസവും ഉച്ചയ്ക്ക് ക്ലോക്കിൽ ചെറിയൊരു പ്രദർശനം."
+    ]
+   },
+   {
+    "id": "sebald",
+    "osm": "w139460727",
+    "kind": "church2",
+    "points": 15,
+    "en": [
+     "St. Sebald",
+     "One of the oldest churches in the city."
+    ],
+    "ml": [
+     "സെന്റ് സെബാൾഡ്",
+     "നഗരത്തിലെ ഏറ്റവും പഴയ പള്ളികളിൽ ഒന്ന്."
+    ]
+   },
+   {
+    "id": "lorenz",
+    "osm": "w144721691",
+    "kind": "church2",
+    "points": 20,
+    "en": [
+     "St. Lorenz",
+     "A big Gothic church with two towers."
+    ],
+    "ml": [
+     "സെന്റ് ലോറൻസ്",
+     "രണ്ട് ഗോപുരങ്ങളുള്ള വലിയ ഗോഥിക് പള്ളി."
+    ]
+   },
+   {
+    "id": "kaiserburg",
+    "osm": "n31013768",
+    "kind": "castle",
+    "points": 25,
+    "en": [
+     "Kaiserburg",
+     "The emperors' castle on the rock above the old town."
+    ],
+    "ml": [
+     "കൈസർബുർഗ്",
+     "പഴയ നഗരത്തിന് മുകളിൽ പാറയിലുള്ള ചക്രവർത്തിമാരുടെ കോട്ട."
+    ]
+   },
+   {
+    "id": "duerer",
+    "osm": "w32477251",
+    "kind": "building",
+    "points": 15,
+    "en": [
+     "Albrecht-Dürer-Haus",
+     "The house where the painter Albrecht Dürer lived."
+    ],
+    "ml": [
+     "ഡ്യൂറർ ഹൗസ്",
+     "ചിത്രകാരൻ ആൽബ്രെഹ്റ്റ് ഡ്യൂറർ താമസിച്ച വീട്."
+    ]
+   }
+  ]
+ },
+ "wuerzburg": {
+  "name_en": "Würzburg",
+  "name_ml": "വ്യൂർസ്ബുർഗ്",
+  "center": [
+   49.7932,
+   9.9315
+  ],
+  "river": {
+   "name": "Main",
+   "half_width": 26
   },
-  "wuerzburg": {
-    "name_en": "Würzburg", "name_ml": "വ്യൂർസ്ബുർഗ്", "center": [49.7932, 9.9315], "river": {"name": "Main", "half_width": 26},
-    "landmarks": [
-      {"id": "residenz", "osm": "r7074", "kind": "palace", "points": 25, "en": ["Würzburg Residenz", "A huge baroque palace and UNESCO World Heritage Site."], "ml": ["റെസിഡൻസ്", "യുനെസ്കോ ലോക പൈതൃക പട്ടികയിലുള്ള വലിയ ബറോക്ക് കൊട്ടാരം."]},
-      {"id": "mainbruecke", "osm": "w165981867", "kind": "bridge", "points": 25, "en": ["Alte Mainbrücke", "The old stone bridge lined with statues of saints."], "ml": ["ആൾട്ടെ മൈൻബ്രുക്കെ", "വിശുദ്ധരുടെ പ്രതിമകളുള്ള പഴയ കൽപ്പാലം."]},
-      {"id": "kilian", "osm": "w26150815", "kind": "church2", "points": 20, "en": ["Dom St. Kilian", "Würzburg's Romanesque cathedral."], "ml": ["ഡോം സെന്റ് കിലിയൻ", "വ്യൂർസ്ബുർഗിലെ റോമനെസ്ക് കത്തീഡ്രൽ."]},
-      {"id": "marienkapelle", "osm": "w106549113", "kind": "church", "points": 15, "en": ["Marienkapelle", "A red-and-white Gothic church on the market square."], "ml": ["മരിയൻകാപ്പെല്ലെ", "ചന്തസ്ഥലത്തെ ചുവപ്പും വെള്ളയുമുള്ള ഗോഥിക് പള്ളി."]},
-      {"id": "falkenhaus", "osm": "w28412547", "kind": "building", "points": 15, "en": ["Falkenhaus", "A house with a fancy rococo facade."], "ml": ["ഫാൽക്കൻഹൗസ്", "മനോഹരമായ റോക്കോക്കോ മുഖപ്പുള്ള വീട്."]},
-      {"id": "neumuenster", "osm": "w119613064", "kind": "church", "points": 15, "en": ["Neumünster", "A baroque church built over the grave of St. Kilian."], "ml": ["നോയ്മ്യൂൺസ്റ്റർ", "വിശുദ്ധ കിലിയന്റെ കല്ലറയ്ക്ക് മുകളിൽ പണിത ബറോക്ക് പള്ളി."]},
-      {"id": "grafeneckart", "osm": "w238965460", "kind": "tower", "points": 10, "en": ["Grafeneckart", "The old town hall with a Romanesque tower."], "ml": ["ഗ്രാഫനെക്കാർട്ട്", "റോമനെസ്ക് ഗോപുരമുള്ള പഴയ നഗരസഭ."]}
+  "landmarks": [
+   {
+    "id": "residenz",
+    "osm": "r7074",
+    "kind": "palace",
+    "points": 25,
+    "en": [
+     "Würzburg Residenz",
+     "A huge baroque palace and UNESCO World Heritage Site."
+    ],
+    "ml": [
+     "റെസിഡൻസ്",
+     "യുനെസ്കോ ലോക പൈതൃക പട്ടികയിലുള്ള വലിയ ബറോക്ക് കൊട്ടാരം."
     ]
+   },
+   {
+    "id": "mainbruecke",
+    "osm": "w165981867",
+    "kind": "bridge",
+    "points": 25,
+    "en": [
+     "Alte Mainbrücke",
+     "The old stone bridge lined with statues of saints."
+    ],
+    "ml": [
+     "ആൾട്ടെ മൈൻബ്രുക്കെ",
+     "വിശുദ്ധരുടെ പ്രതിമകളുള്ള പഴയ കൽപ്പാലം."
+    ]
+   },
+   {
+    "id": "kilian",
+    "osm": "w26150815",
+    "kind": "church2",
+    "points": 20,
+    "en": [
+     "Dom St. Kilian",
+     "Würzburg's Romanesque cathedral."
+    ],
+    "ml": [
+     "ഡോം സെന്റ് കിലിയൻ",
+     "വ്യൂർസ്ബുർഗിലെ റോമനെസ്ക് കത്തീഡ്രൽ."
+    ]
+   },
+   {
+    "id": "marienkapelle",
+    "osm": "w106549113",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "Marienkapelle",
+     "A red-and-white Gothic church on the market square."
+    ],
+    "ml": [
+     "മരിയൻകാപ്പെല്ലെ",
+     "ചന്തസ്ഥലത്തെ ചുവപ്പും വെള്ളയുമുള്ള ഗോഥിക് പള്ളി."
+    ]
+   },
+   {
+    "id": "falkenhaus",
+    "osm": "w28412547",
+    "kind": "building",
+    "points": 15,
+    "en": [
+     "Falkenhaus",
+     "A house with a fancy rococo facade."
+    ],
+    "ml": [
+     "ഫാൽക്കൻഹൗസ്",
+     "മനോഹരമായ റോക്കോക്കോ മുഖപ്പുള്ള വീട്."
+    ]
+   },
+   {
+    "id": "neumuenster",
+    "osm": "w119613064",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "Neumünster",
+     "A baroque church built over the grave of St. Kilian."
+    ],
+    "ml": [
+     "നോയ്മ്യൂൺസ്റ്റർ",
+     "വിശുദ്ധ കിലിയന്റെ കല്ലറയ്ക്ക് മുകളിൽ പണിത ബറോക്ക് പള്ളി."
+    ]
+   },
+   {
+    "id": "grafeneckart",
+    "osm": "w238965460",
+    "kind": "tower",
+    "points": 10,
+    "en": [
+     "Grafeneckart",
+     "The old town hall with a Romanesque tower."
+    ],
+    "ml": [
+     "ഗ്രാഫനെക്കാർട്ട്",
+     "റോമനെസ്ക് ഗോപുരമുള്ള പഴയ നഗരസഭ."
+    ]
+   }
+  ]
+ },
+ "regensburg": {
+  "name_en": "Regensburg",
+  "name_ml": "റേഗൻസ്ബുർഗ്",
+  "center": [
+   49.0195,
+   12.096
+  ],
+  "river": {
+   "name": "Donau",
+   "half_width": 30
   },
-  "regensburg": {
-    "name_en": "Regensburg", "name_ml": "റേഗൻസ്ബുർഗ്", "center": [49.0195, 12.0960], "river": {"name": "Donau", "half_width": 30},
-    "landmarks": [
-      {"id": "dom", "osm": "w39962246", "kind": "church2", "points": 25, "en": ["Regensburg Cathedral", "A Gothic cathedral with two tall spires."], "ml": ["റേഗൻസ്ബുർഗ് കത്തീഡ്രൽ", "ഉയരമുള്ള രണ്ട് ഗോപുരങ്ങളുള്ള ഗോഥിക് കത്തീഡ്രൽ."]},
-      {"id": "steinerne_bruecke", "osm": "w122082110", "kind": "bridge", "points": 25, "en": ["Stone Bridge", "A medieval stone bridge over the Danube."], "ml": ["കൽപ്പാലം", "ഡാന്യൂബ് നദിക്ക് കുറുകെയുള്ള മധ്യകാല കൽപ്പാലം."]},
-      {"id": "wurstkuchl", "osm": "w93576146", "kind": "building", "points": 20, "en": ["Wurstkuchl", "A tiny, centuries-old sausage kitchen by the bridge."], "ml": ["വുർസ്റ്റ്കുഹൽ", "പാലത്തിനരികിലെ നൂറ്റാണ്ടുകൾ പഴക്കമുള്ള ചെറിയ സോസേജ് അടുക്കള."]},
-      {"id": "altes_rathaus", "osm": "r19064789", "kind": "townhall", "points": 15, "en": ["Altes Rathaus", "Where the Imperial Diet once met."], "ml": ["ആൽട്ടെസ് റാത്ത്ഹൗസ്", "സാമ്രാജ്യ സഭ ഒരിക്കൽ സമ്മേളിച്ചിരുന്ന സ്ഥലം."]},
-      {"id": "goldener_turm", "osm": "w558371622", "kind": "tower", "points": 15, "en": ["Goldener Turm", "The tallest medieval house-tower north of the Alps."], "ml": ["ഗോൾഡനർ ടുർം", "ആൽപ്സിന് വടക്കുള്ള ഏറ്റവും ഉയരമുള്ള മധ്യകാല ഗോപുര വീട്."]},
-      {"id": "neupfarrkirche", "osm": "w31663142", "kind": "church", "points": 15, "en": ["Neupfarrkirche", "A church standing alone in the middle of a square."], "ml": ["നോയ്പ്ഫാർകിർഹെ", "ചത്വരത്തിന്റെ നടുവിൽ ഒറ്റയ്ക്ക് നിൽക്കുന്ന പള്ളി."]},
-      {"id": "haidplatz", "osm": "n1910064861", "kind": "square", "points": 10, "en": ["Haidplatz", "An old square where knights once held tournaments."], "ml": ["ഹൈഡ്പ്ലാറ്റ്സ്", "പണ്ട് യോദ്ധാക്കൾ പോരാട്ടങ്ങൾ നടത്തിയിരുന്ന പഴയ ചത്വരം."]}
+  "landmarks": [
+   {
+    "id": "dom",
+    "osm": "w39962246",
+    "kind": "church2",
+    "points": 25,
+    "en": [
+     "Regensburg Cathedral",
+     "A Gothic cathedral with two tall spires."
+    ],
+    "ml": [
+     "റേഗൻസ്ബുർഗ് കത്തീഡ്രൽ",
+     "ഉയരമുള്ള രണ്ട് ഗോപുരങ്ങളുള്ള ഗോഥിക് കത്തീഡ്രൽ."
     ]
+   },
+   {
+    "id": "steinerne_bruecke",
+    "osm": "w122082110",
+    "kind": "bridge",
+    "points": 25,
+    "en": [
+     "Stone Bridge",
+     "A medieval stone bridge over the Danube."
+    ],
+    "ml": [
+     "കൽപ്പാലം",
+     "ഡാന്യൂബ് നദിക്ക് കുറുകെയുള്ള മധ്യകാല കൽപ്പാലം."
+    ]
+   },
+   {
+    "id": "wurstkuchl",
+    "osm": "w93576146",
+    "kind": "building",
+    "points": 20,
+    "en": [
+     "Wurstkuchl",
+     "A tiny, centuries-old sausage kitchen by the bridge."
+    ],
+    "ml": [
+     "വുർസ്റ്റ്കുഹൽ",
+     "പാലത്തിനരികിലെ നൂറ്റാണ്ടുകൾ പഴക്കമുള്ള ചെറിയ സോസേജ് അടുക്കള."
+    ]
+   },
+   {
+    "id": "altes_rathaus",
+    "osm": "r19064789",
+    "kind": "townhall",
+    "points": 15,
+    "en": [
+     "Altes Rathaus",
+     "Where the Imperial Diet once met."
+    ],
+    "ml": [
+     "ആൽട്ടെസ് റാത്ത്ഹൗസ്",
+     "സാമ്രാജ്യ സഭ ഒരിക്കൽ സമ്മേളിച്ചിരുന്ന സ്ഥലം."
+    ]
+   },
+   {
+    "id": "goldener_turm",
+    "osm": "w558371622",
+    "kind": "tower",
+    "points": 15,
+    "en": [
+     "Goldener Turm",
+     "The tallest medieval house-tower north of the Alps."
+    ],
+    "ml": [
+     "ഗോൾഡനർ ടുർം",
+     "ആൽപ്സിന് വടക്കുള്ള ഏറ്റവും ഉയരമുള്ള മധ്യകാല ഗോപുര വീട്."
+    ]
+   },
+   {
+    "id": "neupfarrkirche",
+    "osm": "w31663142",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "Neupfarrkirche",
+     "A church standing alone in the middle of a square."
+    ],
+    "ml": [
+     "നോയ്പ്ഫാർകിർഹെ",
+     "ചത്വരത്തിന്റെ നടുവിൽ ഒറ്റയ്ക്ക് നിൽക്കുന്ന പള്ളി."
+    ]
+   },
+   {
+    "id": "haidplatz",
+    "osm": "n1910064861",
+    "kind": "square",
+    "points": 10,
+    "en": [
+     "Haidplatz",
+     "An old square where knights once held tournaments."
+    ],
+    "ml": [
+     "ഹൈഡ്പ്ലാറ്റ്സ്",
+     "പണ്ട് യോദ്ധാക്കൾ പോരാട്ടങ്ങൾ നടത്തിയിരുന്ന പഴയ ചത്വരം."
+    ]
+   }
+  ]
+ },
+ "erlangen": {
+  "name_en": "Erlangen",
+  "name_ml": "എർലാംഗൻ",
+  "center": [
+   49.597,
+   11.0045
+  ],
+  "river": null,
+  "landmarks": [
+   {
+    "id": "schloss",
+    "osm": "w27883772",
+    "kind": "palace",
+    "points": 25,
+    "en": [
+     "Erlangen Palace",
+     "The margraves' baroque palace, now part of the university."
+    ],
+    "ml": [
+     "എർലാംഗൻ കൊട്ടാരം",
+     "മാർഗ്രേവുമാരുടെ ബറോക്ക് കൊട്ടാരം, ഇപ്പോൾ സർവകലാശാലയുടെ ഭാഗം."
+    ]
+   },
+   {
+    "id": "orangerie",
+    "osm": "w27883899",
+    "kind": "building",
+    "points": 15,
+    "en": [
+     "Orangerie",
+     "A curved garden building in the palace garden."
+    ],
+    "ml": [
+     "ഓറഞ്ചറി",
+     "കൊട്ടാര ഉദ്യാനത്തിലെ വളഞ്ഞ കെട്ടിടം."
+    ]
+   },
+   {
+    "id": "hugenottenbrunnen",
+    "osm": "w568537829",
+    "kind": "fountain",
+    "points": 20,
+    "en": [
+     "Huguenot Fountain",
+     "Honours the French Huguenots who built the new town."
+    ],
+    "ml": [
+     "ഹ്യൂഗനോട്ട് ജലധാര",
+     "പുതിയ നഗരം പണിത ഫ്രഞ്ച് ഹ്യൂഗനോട്ടുകളുടെ സ്മരണയ്ക്ക്."
+    ]
+   },
+   {
+    "id": "hugenottenkirche",
+    "osm": "w31509304",
+    "kind": "church",
+    "points": 20,
+    "en": [
+     "Huguenot Church",
+     "The church of the French refugees who came in 1686."
+    ],
+    "ml": [
+     "ഹ്യൂഗനോട്ട് പള്ളി",
+     "1686-ൽ വന്ന ഫ്രഞ്ച് അഭയാർത്ഥികളുടെ പള്ളി."
+    ]
+   },
+   {
+    "id": "neustaedter_kirche",
+    "osm": "w226672615",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "Neustädter Kirche",
+     "A baroque church in the new town."
+    ],
+    "ml": [
+     "നോയ്ഷ്റ്റേറ്റർ പള്ളി",
+     "പുതിയ നഗരത്തിലെ ബറോക്ക് പള്ളി."
+    ]
+   },
+   {
+    "id": "marktplatz",
+    "osm": "w570463377",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Marktplatz",
+     "The market square in front of the palace."
+    ],
+    "ml": [
+     "മാർക്ട്പ്ലാറ്റ്സ്",
+     "കൊട്ടാരത്തിന് മുന്നിലെ ചന്ത ചത്വരം."
+    ]
+   },
+   {
+    "id": "hugenottenplatz",
+    "osm": "r3618333",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Hugenottenplatz",
+     "The busy square at the heart of the new town."
+    ],
+    "ml": [
+     "ഹ്യൂഗനോട്ടൻപ്ലാറ്റ്സ്",
+     "പുതിയ നഗരത്തിന്റെ ഹൃദയത്തിലെ തിരക്കുള്ള ചത്വരം."
+    ]
+   }
+  ]
+ },
+ "augsburg": {
+  "name_en": "Augsburg",
+  "name_ml": "ഓഗ്സ്ബുർഗ്",
+  "center": [
+   48.3689,
+   10.899
+  ],
+  "river": null,
+  "landmarks": [
+   {
+    "id": "rathaus",
+    "osm": "w23576086",
+    "kind": "townhall",
+    "points": 25,
+    "en": [
+     "Augsburg Town Hall",
+     "A Renaissance town hall with the Golden Hall inside."
+    ],
+    "ml": [
+     "ഓഗ്സ്ബുർഗ് ടൗൺ ഹാൾ",
+     "ഉള്ളിൽ 'സുവർണ്ണ ഹാൾ' ഉള്ള നവോത്ഥാനകാല നഗരസഭ."
+    ]
+   },
+   {
+    "id": "perlachturm",
+    "osm": "w204541313",
+    "kind": "tower",
+    "points": 20,
+    "en": [
+     "Perlachturm",
+     "The tall bell tower next to the town hall."
+    ],
+    "ml": [
+     "പെർലാഹ്ടുർം",
+     "നഗരസഭയ്ക്കരികിലെ ഉയരമുള്ള മണിഗോപുരം."
+    ]
+   },
+   {
+    "id": "dom",
+    "osm": "w70193982",
+    "kind": "church2",
+    "points": 20,
+    "en": [
+     "Augsburg Cathedral",
+     "Its prophet windows are among the oldest stained glass anywhere."
+    ],
+    "ml": [
+     "ഓഗ്സ്ബുർഗ് കത്തീഡ്രൽ",
+     "ലോകത്തിലെ ഏറ്റവും പഴയ ചിത്രജാലകങ്ങളിൽ ചിലത് ഇവിടെ."
+    ]
+   },
+   {
+    "id": "fuggerei",
+    "osm": "w88285140",
+    "kind": "square",
+    "points": 25,
+    "en": [
+     "Fuggerei",
+     "The world's oldest social housing: rent is under one euro a year."
+    ],
+    "ml": [
+     "ഫുഗ്ഗറൈ",
+     "ലോകത്തിലെ ഏറ്റവും പഴയ സാമൂഹിക ഭവനം: വാടക വർഷം ഒരു യൂറോയിൽ താഴെ."
+    ]
+   },
+   {
+    "id": "augustusbrunnen",
+    "osm": "r4600542",
+    "kind": "fountain",
+    "points": 15,
+    "en": [
+     "Augustus Fountain",
+     "Named for the Roman emperor after whom the city is named."
+    ],
+    "ml": [
+     "അഗസ്റ്റസ് ജലധാര",
+     "നഗരത്തിന് പേര് നൽകിയ റോമൻ ചക്രവർത്തിയുടെ പേരിൽ."
+    ]
+   },
+   {
+    "id": "herkulesbrunnen",
+    "osm": "w1155997224",
+    "kind": "fountain",
+    "points": 20,
+    "en": [
+     "Hercules Fountain",
+     "A bronze fountain on Maximilianstraße."
+    ],
+    "ml": [
+     "ഹെർക്കുലീസ് ജലധാര",
+     "മാക്സിമിലിയൻ തെരുവിലെ വെങ്കല ജലധാര."
+    ]
+   }
+  ]
+ },
+ "berlin": {
+  "name_en": "Berlin",
+  "name_ml": "ബെർലിൻ",
+  "center": [
+   52.517,
+   13.393
+  ],
+  "half": 560,
+  "river": {
+   "name": "Spree",
+   "half_width": 11
   },
-  "erlangen": {
-    "name_en": "Erlangen", "name_ml": "എർലാംഗൻ", "center": [49.5970, 11.0045], "river": null,
-    "landmarks": [
-      {"id": "schloss", "osm": "w27883772", "kind": "palace", "points": 25, "en": ["Erlangen Palace", "The margraves' baroque palace, now part of the university."], "ml": ["എർലാംഗൻ കൊട്ടാരം", "മാർഗ്രേവുമാരുടെ ബറോക്ക് കൊട്ടാരം, ഇപ്പോൾ സർവകലാശാലയുടെ ഭാഗം."]},
-      {"id": "orangerie", "osm": "w27883899", "kind": "building", "points": 15, "en": ["Orangerie", "A curved garden building in the palace garden."], "ml": ["ഓറഞ്ചറി", "കൊട്ടാര ഉദ്യാനത്തിലെ വളഞ്ഞ കെട്ടിടം."]},
-      {"id": "hugenottenbrunnen", "osm": "w568537829", "kind": "fountain", "points": 20, "en": ["Huguenot Fountain", "Honours the French Huguenots who built the new town."], "ml": ["ഹ്യൂഗനോട്ട് ജലധാര", "പുതിയ നഗരം പണിത ഫ്രഞ്ച് ഹ്യൂഗനോട്ടുകളുടെ സ്മരണയ്ക്ക്."]},
-      {"id": "hugenottenkirche", "osm": "w31509304", "kind": "church", "points": 20, "en": ["Huguenot Church", "The church of the French refugees who came in 1686."], "ml": ["ഹ്യൂഗനോട്ട് പള്ളി", "1686-ൽ വന്ന ഫ്രഞ്ച് അഭയാർത്ഥികളുടെ പള്ളി."]},
-      {"id": "neustaedter_kirche", "osm": "w226672615", "kind": "church", "points": 15, "en": ["Neustädter Kirche", "A baroque church in the new town."], "ml": ["നോയ്ഷ്റ്റേറ്റർ പള്ളി", "പുതിയ നഗരത്തിലെ ബറോക്ക് പള്ളി."]},
-      {"id": "marktplatz", "osm": "w570463377", "kind": "square", "points": 15, "en": ["Marktplatz", "The market square in front of the palace."], "ml": ["മാർക്ട്പ്ലാറ്റ്സ്", "കൊട്ടാരത്തിന് മുന്നിലെ ചന്ത ചത്വരം."]},
-      {"id": "hugenottenplatz", "osm": "r3618333", "kind": "square", "points": 15, "en": ["Hugenottenplatz", "The busy square at the heart of the new town."], "ml": ["ഹ്യൂഗനോട്ടൻപ്ലാറ്റ്സ്", "പുതിയ നഗരത്തിന്റെ ഹൃദയത്തിലെ തിരക്കുള്ള ചത്വരം."]}
+  "landmarks": [
+   {
+    "id": "brandenburger_tor",
+    "osm": "w518071791",
+    "kind": "gate",
+    "points": 25,
+    "en": [
+     "Brandenburger Tor",
+     "Germany's most famous gate, with the four-horse chariot on top."
+    ],
+    "ml": [
+     "ബ്രാൻഡൻബുർഗർ ടോർ",
+     "മുകളിൽ നാലു കുതിരകളുള്ള രഥവുമായി ജർമനിയിലെ ഏറ്റവും പ്രശസ്തമായ കവാടം."
     ]
+   },
+   {
+    "id": "reichstag",
+    "osm": "r2201742",
+    "kind": "parliament",
+    "points": 20,
+    "en": [
+     "Reichstag",
+     "Germany's parliament, with a glass dome you can walk up inside."
+    ],
+    "ml": [
+     "റൈഷ്സ്റ്റാഗ്",
+     "ഉള്ളിലൂടെ നടന്നു കയറാവുന്ന ചില്ലുതാഴികക്കുടമുള്ള ജർമൻ പാർലമെന്റ്."
+    ]
+   },
+   {
+    "id": "fernsehturm",
+    "osm": "w556435241",
+    "kind": "tv_tower",
+    "points": 25,
+    "en": [
+     "Fernsehturm",
+     "The TV tower: 368 metres, with a silver ball at the top."
+    ],
+    "ml": [
+     "ഫേൺസേടുർം",
+     "368 മീറ്റർ ഉയരമുള്ള ടിവി ടവർ, മുകളിൽ വെള്ളിപ്പന്ത്."
+    ]
+   },
+   {
+    "id": "berliner_dom",
+    "osm": "w313670734",
+    "kind": "cathedral",
+    "points": 20,
+    "en": [
+     "Berliner Dom",
+     "The big cathedral with the green dome on Museum Island."
+    ],
+    "ml": [
+     "ബെർലിനർ ഡോം",
+     "മ്യൂസിയം ദ്വീപിലെ പച്ച താഴികക്കുടമുള്ള വലിയ കത്തീഡ്രൽ."
+    ]
+   },
+   {
+    "id": "rotes_rathaus",
+    "osm": "r4211905",
+    "kind": "townhall",
+    "points": 10,
+    "en": [
+     "Rotes Rathaus",
+     "The Red Town Hall, built of red brick."
+    ],
+    "ml": [
+     "റോട്ടസ് റാത്ത്ഹൗസ്",
+     "ചുവന്ന ഇഷ്ടികയിൽ പണിത ചുവന്ന ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "altes_museum",
+    "osm": "r3619",
+    "kind": "museum",
+    "points": 10,
+    "en": [
+     "Altes Museum",
+     "A museum like a Greek temple, with 18 columns."
+    ],
+    "ml": [
+     "ആൾട്ടസ് മ്യൂസിയം",
+     "18 തൂണുകളുള്ള ഗ്രീക്ക് ക്ഷേത്രം പോലുള്ള മ്യൂസിയം."
+    ]
+   },
+   {
+    "id": "gendarmenmarkt",
+    "osm": "w844740667",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Gendarmenmarkt",
+     "Berlin's most beautiful square: two domed churches and a concert hall."
+    ],
+    "ml": [
+     "ജെൻഡാർമെൻമാർക്റ്റ്",
+     "രണ്ട് താഴികക്കുടപ്പള്ളികളും ഒരു സംഗീതശാലയുമുള്ള ബെർലിനിലെ ഏറ്റവും മനോഹരമായ ചത്വരം."
+    ]
+   }
+  ]
+ },
+ "hamburg": {
+  "name_en": "Hamburg",
+  "name_ml": "ഹാംബുർഗ്",
+  "center": [
+   53.5465,
+   9.9845
+  ],
+  "half": 560,
+  "river": {
+   "name": "Elbe",
+   "half_width": 60
   },
-  "augsburg": {
-    "name_en": "Augsburg", "name_ml": "ഓഗ്സ്ബുർഗ്", "center": [48.3689, 10.8990], "river": null,
-    "landmarks": [
-      {"id": "rathaus", "osm": "w23576086", "kind": "townhall", "points": 25, "en": ["Augsburg Town Hall", "A Renaissance town hall with the Golden Hall inside."], "ml": ["ഓഗ്സ്ബുർഗ് ടൗൺ ഹാൾ", "ഉള്ളിൽ 'സുവർണ്ണ ഹാൾ' ഉള്ള നവോത്ഥാനകാല നഗരസഭ."]},
-      {"id": "perlachturm", "osm": "w204541313", "kind": "tower", "points": 20, "en": ["Perlachturm", "The tall bell tower next to the town hall."], "ml": ["പെർലാഹ്ടുർം", "നഗരസഭയ്ക്കരികിലെ ഉയരമുള്ള മണിഗോപുരം."]},
-      {"id": "dom", "osm": "w70193982", "kind": "church2", "points": 20, "en": ["Augsburg Cathedral", "Its prophet windows are among the oldest stained glass anywhere."], "ml": ["ഓഗ്സ്ബുർഗ് കത്തീഡ്രൽ", "ലോകത്തിലെ ഏറ്റവും പഴയ ചിത്രജാലകങ്ങളിൽ ചിലത് ഇവിടെ."]},
-      {"id": "fuggerei", "osm": "w88285140", "kind": "square", "points": 25, "en": ["Fuggerei", "The world's oldest social housing: rent is under one euro a year."], "ml": ["ഫുഗ്ഗറൈ", "ലോകത്തിലെ ഏറ്റവും പഴയ സാമൂഹിക ഭവനം: വാടക വർഷം ഒരു യൂറോയിൽ താഴെ."]},
-      {"id": "augustusbrunnen", "osm": "r4600542", "kind": "fountain", "points": 15, "en": ["Augustus Fountain", "Named for the Roman emperor after whom the city is named."], "ml": ["അഗസ്റ്റസ് ജലധാര", "നഗരത്തിന് പേര് നൽകിയ റോമൻ ചക്രവർത്തിയുടെ പേരിൽ."]},
-      {"id": "herkulesbrunnen", "osm": "w1155997224", "kind": "fountain", "points": 20, "en": ["Hercules Fountain", "A bronze fountain on Maximilianstraße."], "ml": ["ഹെർക്കുലീസ് ജലധാര", "മാക്സിമിലിയൻ തെരുവിലെ വെങ്കല ജലധാര."]}
+  "landmarks": [
+   {
+    "id": "elbphilharmonie",
+    "osm": "w24981342",
+    "kind": "concert_hall",
+    "points": 25,
+    "en": [
+     "Elbphilharmonie",
+     "A glass wave on top of an old brick warehouse: a concert hall."
+    ],
+    "ml": [
+     "എൽബ്ഫിൽഹാർമോണി",
+     "പഴയ ഇഷ്ടിക ഗോഡൗണിന് മുകളിൽ ചില്ലുതിരപോലുള്ള സംഗീതശാല."
     ]
-  }
+   },
+   {
+    "id": "rathaus",
+    "osm": "w142944431",
+    "kind": "townhall",
+    "points": 20,
+    "en": [
+     "Hamburg Rathaus",
+     "The grand town hall with its tall green-roofed tower."
+    ],
+    "ml": [
+     "ഹാംബുർഗ് റാത്ത്ഹൗസ്",
+     "ഉയരമുള്ള പച്ച മേൽക്കൂര ഗോപുരമുള്ള ഗംഭീര ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "michel",
+    "osm": "w22731336",
+    "kind": "church",
+    "points": 20,
+    "en": [
+     "St. Michaelis (Michel)",
+     "Hamburg's landmark church; sailors look for its tower."
+    ],
+    "ml": [
+     "സെന്റ് മിഖായേലിസ് (മിഷൽ)",
+     "നാവികർ നോക്കുന്ന ഗോപുരമുള്ള ഹാംബുർഗിന്റെ അടയാളപ്പള്ളി."
+    ]
+   },
+   {
+    "id": "speicherstadt",
+    "osm": "n4417808181",
+    "kind": "warehouses",
+    "points": 15,
+    "en": [
+     "Speicherstadt",
+     "Red-brick warehouses on canals: the world's largest warehouse district."
+    ],
+    "ml": [
+     "ഷ്പൈഷർഷ്റ്റാറ്റ്",
+     "കനാലുകളിലെ ചുവന്ന ഇഷ്ടിക ഗോഡൗണുകൾ: ലോകത്തിലെ ഏറ്റവും വലിയ ഗോഡൗൺ മേഖല."
+    ]
+   },
+   {
+    "id": "landungsbruecken",
+    "osm": "w57378505",
+    "kind": "pier",
+    "points": 15,
+    "en": [
+     "Landungsbrücken",
+     "The floating piers on the Elbe, with ships and a clock tower."
+    ],
+    "ml": [
+     "ലാൻഡുങ്സ്ബ്രൂക്കൻ",
+     "കപ്പലുകളും ക്ലോക്ക് ടവറുമുള്ള എൽബെ നദിയിലെ ഒഴുകുന്ന കടവുകൾ."
+    ]
+   },
+   {
+    "id": "binnenalster",
+    "osm": "r6693624",
+    "kind": "lake",
+    "points": 15,
+    "en": [
+     "Binnenalster",
+     "The city lake with the tall fountain in the middle."
+    ],
+    "ml": [
+     "ബിന്നൻആൽസ്റ്റർ",
+     "നടുവിൽ ഉയരുന്ന ജലധാരയുള്ള നഗരതടാകം."
+    ]
+   },
+   {
+    "id": "chilehaus",
+    "osm": "r918679",
+    "kind": "building",
+    "points": 15,
+    "en": [
+     "Chilehaus",
+     "A brick office building shaped like a ship's bow."
+    ],
+    "ml": [
+     "ചിലെഹൗസ്",
+     "കപ്പലിന്റെ മുൻഭാഗം പോലുള്ള ഇഷ്ടിക കെട്ടിടം."
+    ]
+   }
+  ]
+ },
+ "koeln": {
+  "name_en": "Köln",
+  "name_ml": "കൊളോൺ",
+  "center": [
+   50.937,
+   6.96
+  ],
+  "river": {
+   "name": "Rhein",
+   "half_width": 80
+  },
+  "landmarks": [
+   {
+    "id": "dom",
+    "osm": "w4532022",
+    "kind": "cathedral2",
+    "points": 30,
+    "en": [
+     "Kölner Dom",
+     "The giant twin-spired cathedral: 157 metres tall."
+    ],
+    "ml": [
+     "കൊളോൺ കത്തീഡ്രൽ",
+     "157 മീറ്റർ ഉയരമുള്ള ഇരട്ട ഗോപുരങ്ങളുള്ള ഭീമൻ കത്തീഡ്രൽ."
+    ]
+   },
+   {
+    "id": "hohenzollernbruecke",
+    "osm": "r5460390",
+    "kind": "bridge",
+    "points": 20,
+    "en": [
+     "Hohenzollernbrücke",
+     "The railway bridge over the Rhine, covered in love locks."
+    ],
+    "ml": [
+     "ഹോഹെൻസോളേൺ പാലം",
+     "പ്രണയപ്പൂട്ടുകൾ നിറഞ്ഞ, റൈനിനു കുറുകെയുള്ള റെയിൽപ്പാലം."
+    ]
+   },
+   {
+    "id": "gross_st_martin",
+    "osm": "w25270980",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "Groß St. Martin",
+     "A Romanesque church with a big square tower by the river."
+    ],
+    "ml": [
+     "ഗ്രോസ് സെന്റ് മാർട്ടിൻ",
+     "നദിക്കരയിൽ വലിയ ചതുര ഗോപുരമുള്ള റോമനെസ്ക് പള്ളി."
+    ]
+   },
+   {
+    "id": "rathaus",
+    "osm": "w16186002",
+    "kind": "townhall",
+    "points": 15,
+    "en": [
+     "Historisches Rathaus",
+     "Germany's oldest town hall, with a tall Gothic tower."
+    ],
+    "ml": [
+     "ഹിസ്റ്റോറിഷസ് റാത്ത്ഹൗസ്",
+     "ഉയരമുള്ള ഗോഥിക് ഗോപുരമുള്ള ജർമനിയിലെ ഏറ്റവും പഴയ ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "schokoladenmuseum",
+    "osm": "w334606061",
+    "kind": "museum",
+    "points": 15,
+    "en": [
+     "Schokoladenmuseum",
+     "A chocolate museum shaped like a ship, with a chocolate fountain."
+    ],
+    "ml": [
+     "ചോക്ലേറ്റ് മ്യൂസിയം",
+     "ചോക്ലേറ്റ് ജലധാരയുള്ള, കപ്പലിന്റെ ആകൃതിയിലുള്ള മ്യൂസിയം."
+    ]
+   },
+   {
+    "id": "heumarkt",
+    "osm": "r3538248",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Heumarkt",
+     "The old market square with the king on his horse."
+    ],
+    "ml": [
+     "ഹോയ്മാർക്റ്റ്",
+     "കുതിരപ്പുറത്തെ രാജാവിന്റെ പ്രതിമയുള്ള പഴയ ചന്തസ്ഥലം."
+    ]
+   },
+   {
+    "id": "museum_ludwig",
+    "osm": "n633480736",
+    "kind": "museum",
+    "points": 15,
+    "en": [
+     "Museum Ludwig",
+     "Modern art under zig-zag roofs, right next to the Dom."
+    ],
+    "ml": [
+     "മ്യൂസിയം ലുഡ്വിഗ്",
+     "ഡോമിനു തൊട്ടടുത്ത്, വളഞ്ഞുപുളഞ്ഞ മേൽക്കൂരകൾക്കു താഴെ ആധുനിക കല."
+    ]
+   }
+  ]
+ },
+ "frankfurt": {
+  "name_en": "Frankfurt",
+  "name_ml": "ഫ്രാങ്ക്ഫുർട്ട്",
+  "center": [
+   50.1115,
+   8.679
+  ],
+  "river": {
+   "name": "Main",
+   "half_width": 40
+  },
+  "landmarks": [
+   {
+    "id": "roemer",
+    "osm": "n34223060",
+    "kind": "townhall",
+    "points": 25,
+    "en": [
+     "Römer",
+     "The town hall with three stepped gables on the Römerberg."
+    ],
+    "ml": [
+     "റ്യോമർ",
+     "റ്യോമർബർഗിലെ മൂന്ന് പടിക്കൂരകളുള്ള ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "kaiserdom",
+    "osm": "w11018815",
+    "kind": "cathedral",
+    "points": 20,
+    "en": [
+     "Kaiserdom",
+     "The red sandstone cathedral where emperors were crowned."
+    ],
+    "ml": [
+     "കൈസർഡോം",
+     "ചക്രവർത്തിമാരെ കിരീടമണിയിച്ച ചുവന്ന മണൽക്കൽ കത്തീഡ്രൽ."
+    ]
+   },
+   {
+    "id": "paulskirche",
+    "osm": "w11526375",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "Paulskirche",
+     "The round church where Germany's first parliament met."
+    ],
+    "ml": [
+     "പൗൾസ്കിർഷെ",
+     "ജർമനിയുടെ ആദ്യ പാർലമെന്റ് ചേർന്ന വൃത്താകൃതിയിലുള്ള പള്ളി."
+    ]
+   },
+   {
+    "id": "eiserner_steg",
+    "osm": "w968092251",
+    "kind": "bridge",
+    "points": 15,
+    "en": [
+     "Eiserner Steg",
+     "The iron footbridge over the Main, with the skyline behind."
+    ],
+    "ml": [
+     "ഐസേണർ ഷ്റ്റെഗ്",
+     "പിന്നിൽ അംബരചുംബികളുള്ള, മൈൻ നദിക്കു മേലുള്ള ഇരുമ്പ് നടപ്പാലം."
+    ]
+   },
+   {
+    "id": "main_tower",
+    "osm": "w11526963",
+    "kind": "skyscraper",
+    "points": 20,
+    "en": [
+     "Main Tower",
+     "A 200-metre skyscraper you can go up: 'Mainhattan'."
+    ],
+    "ml": [
+     "മൈൻ ടവർ",
+     "മുകളിൽ കയറാവുന്ന 200 മീറ്റർ അംബരചുംബി: 'മൈൻഹാട്ടൻ'."
+    ]
+   },
+   {
+    "id": "alte_oper",
+    "osm": "w384153099",
+    "kind": "opera",
+    "points": 15,
+    "en": [
+     "Alte Oper",
+     "The old opera house, rebuilt after the war."
+    ],
+    "ml": [
+     "ആൾട്ടെ ഓപ്പർ",
+     "യുദ്ധശേഷം പുനർനിർമിച്ച പഴയ ഓപ്പറ ഹൗസ്."
+    ]
+   },
+   {
+    "id": "hauptwache",
+    "osm": "w27769650",
+    "kind": "building",
+    "points": 15,
+    "en": [
+     "Hauptwache",
+     "The little baroque guardhouse in the middle of the shopping streets."
+    ],
+    "ml": [
+     "ഹൗപ്റ്റ്‌വാഷെ",
+     "ഷോപ്പിങ് തെരുവുകളുടെ നടുവിലെ ചെറിയ ബറോക്ക് കാവൽപ്പുര."
+    ]
+   }
+  ]
+ },
+ "stuttgart": {
+  "name_en": "Stuttgart",
+  "name_ml": "ഷ്റ്റുട്ട്ഗാർട്ട്",
+  "center": [
+   48.78,
+   9.181
+  ],
+  "landmarks": [
+   {
+    "id": "neues_schloss",
+    "osm": "w246115202",
+    "kind": "palace",
+    "points": 25,
+    "en": [
+     "Neues Schloss",
+     "The big baroque palace on the Schlossplatz."
+    ],
+    "ml": [
+     "നോയസ് ഷ്ലോസ്",
+     "ഷ്ലോസ്പ്ലാറ്റ്സിലെ വലിയ ബറോക്ക് കൊട്ടാരം."
+    ]
+   },
+   {
+    "id": "altes_schloss",
+    "osm": "r22988",
+    "kind": "castle",
+    "points": 20,
+    "en": [
+     "Altes Schloss",
+     "The old castle with round towers and an arcaded courtyard."
+    ],
+    "ml": [
+     "ആൾട്ടസ് ഷ്ലോസ്",
+     "വട്ടഗോപുരങ്ങളും കമാനമുറ്റവുമുള്ള പഴയ കോട്ട."
+    ]
+   },
+   {
+    "id": "stiftskirche",
+    "osm": "w9727140",
+    "kind": "church",
+    "points": 20,
+    "en": [
+     "Stiftskirche",
+     "The church with two different towers."
+    ],
+    "ml": [
+     "ഷ്റ്റിഫ്റ്റ്സ്കിർഷെ",
+     "രണ്ട് വ്യത്യസ്ത ഗോപുരങ്ങളുള്ള പള്ളി."
+    ]
+   },
+   {
+    "id": "schlossplatz",
+    "osm": "w3933618",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Schlossplatz",
+     "The big square with the Jubilee Column and fountains."
+    ],
+    "ml": [
+     "ഷ്ലോസ്പ്ലാറ്റ്സ്",
+     "ജൂബിലി സ്തംഭവും ജലധാരകളുമുള്ള വലിയ ചത്വരം."
+    ]
+   },
+   {
+    "id": "koenigsbau",
+    "osm": "w9414673",
+    "kind": "colonnade",
+    "points": 15,
+    "en": [
+     "Königsbau",
+     "A long building with a row of columns along the square."
+    ],
+    "ml": [
+     "ക്യോനിഗ്സ്ബൗ",
+     "ചത്വരത്തിനരികെ തൂണുകളുടെ നിരയുള്ള നീണ്ട കെട്ടിടം."
+    ]
+   },
+   {
+    "id": "opernhaus",
+    "osm": "w442911745",
+    "kind": "opera",
+    "points": 15,
+    "en": [
+     "Staatsoper",
+     "The opera house by the lake in the palace garden."
+    ],
+    "ml": [
+     "ഷ്റ്റാറ്റ്സോപ്പർ",
+     "കൊട്ടാരോദ്യാനത്തിലെ തടാകക്കരയിലെ ഓപ്പറ ഹൗസ്."
+    ]
+   },
+   {
+    "id": "bahnhofsturm",
+    "osm": "w27153443",
+    "kind": "station_tower",
+    "points": 15,
+    "en": [
+     "Bahnhofsturm",
+     "The station tower with the spinning Mercedes star on top."
+    ],
+    "ml": [
+     "ബാൻഹോഫ്സ്റ്റുർം",
+     "മുകളിൽ കറങ്ങുന്ന മെഴ്സിഡസ് നക്ഷത്രമുള്ള സ്റ്റേഷൻ ഗോപുരം."
+    ]
+   }
+  ]
+ },
+ "duesseldorf": {
+  "name_en": "Düsseldorf",
+  "name_ml": "ഡ്യൂസൽഡോർഫ്",
+  "center": [
+   51.2225,
+   6.77
+  ],
+  "half": 340,
+  "river": {
+   "name": "Rhein",
+   "half_width": 68
+  },
+  "landmarks": [
+   {
+    "id": "rheinturm",
+    "osm": "w161648930",
+    "kind": "tv_tower",
+    "points": 25,
+    "en": [
+     "Rheinturm",
+     "The 240-metre TV tower with a clock made of lights."
+    ],
+    "ml": [
+     "റൈൻടുർം",
+     "വെളിച്ചങ്ങൾകൊണ്ടുള്ള ഘടികാരമുള്ള 240 മീറ്റർ ടിവി ടവർ."
+    ]
+   },
+   {
+    "id": "schlossturm",
+    "osm": "w45774488",
+    "kind": "tower",
+    "points": 15,
+    "en": [
+     "Schlossturm",
+     "All that is left of the old castle: one tower by the Rhine."
+    ],
+    "ml": [
+     "ഷ്ലോസ്ടുർം",
+     "പഴയ കോട്ടയിൽ ബാക്കിയുള്ളത്: റൈനരികിലെ ഒരു ഗോപുരം."
+    ]
+   },
+   {
+    "id": "rathaus",
+    "osm": "w23444432",
+    "kind": "townhall",
+    "points": 15,
+    "en": [
+     "Rathaus",
+     "The town hall on the market square with the Elector on his horse."
+    ],
+    "ml": [
+     "റാത്ത്ഹൗസ്",
+     "കുതിരപ്പുറത്തെ ഇലക്ടറുടെ പ്രതിമയുള്ള ചന്തസ്ഥലത്തെ ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "koenigsallee",
+    "osm": "w827906642",
+    "kind": "square",
+    "points": 20,
+    "en": [
+     "Königsallee",
+     "The 'Kö': a posh shopping street along a canal."
+    ],
+    "ml": [
+     "ക്യോനിഗ്സാലെ",
+     "'ക്യോ': കനാലിനരികിലെ ആഡംബര ഷോപ്പിങ് തെരുവ്."
+    ]
+   },
+   {
+    "id": "lambertus",
+    "osm": "w23445439",
+    "kind": "church",
+    "points": 20,
+    "en": [
+     "St. Lambertus",
+     "The church with the famous twisted spire."
+    ],
+    "ml": [
+     "സെന്റ് ലാംബെർട്ടസ്",
+     "പിരിഞ്ഞ ഗോപുരമുനയുള്ള പ്രശസ്തമായ പള്ളി."
+    ]
+   },
+   {
+    "id": "bolkerstrasse",
+    "osm": "w45666969",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Bolkerstraße",
+     "The old town street called 'the longest bar in the world'."
+    ],
+    "ml": [
+     "ബോൾക്കർഷ്ട്രാസെ",
+     "'ലോകത്തിലെ ഏറ്റവും നീളമുള്ള ബാർ' എന്നറിയപ്പെടുന്ന പഴയ തെരുവ്."
+    ]
+   },
+   {
+    "id": "rheinufer",
+    "osm": "w43472550",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Rheinuferpromenade",
+     "The riverside promenade, where everyone walks on sunny days."
+    ],
+    "ml": [
+     "റൈനുഫർ പ്രൊമനേഡ്",
+     "വെയിലുള്ള ദിവസങ്ങളിൽ എല്ലാവരും നടക്കുന്ന നദിക്കരപ്പാത."
+    ]
+   }
+  ]
+ },
+ "dresden": {
+  "name_en": "Dresden",
+  "name_ml": "ഡ്രെസ്ഡൻ",
+  "center": [
+   51.053,
+   13.738
+  ],
+  "river": {
+   "name": "Elbe",
+   "half_width": 30
+  },
+  "landmarks": [
+   {
+    "id": "frauenkirche",
+    "osm": "w23040893",
+    "kind": "dome_church",
+    "points": 25,
+    "en": [
+     "Frauenkirche",
+     "The great stone dome, rebuilt from its ruins in 2005."
+    ],
+    "ml": [
+     "ഫ്രൗവൻകിർഷെ",
+     "അവശിഷ്ടങ്ങളിൽ നിന്ന് 2005-ൽ പുനർനിർമിച്ച വലിയ കൽത്താഴികക്കുടം."
+    ]
+   },
+   {
+    "id": "zwinger",
+    "osm": "r4283218",
+    "kind": "palace",
+    "points": 25,
+    "en": [
+     "Zwinger",
+     "A baroque palace courtyard with a crown on its gate."
+    ],
+    "ml": [
+     "സ്വിംഗർ",
+     "കവാടത്തിൽ കിരീടമുള്ള ബറോക്ക് കൊട്ടാര മുറ്റം."
+    ]
+   },
+   {
+    "id": "semperoper",
+    "osm": "w242305584",
+    "kind": "opera",
+    "points": 20,
+    "en": [
+     "Semperoper",
+     "The opera house with a lion-drawn chariot on top."
+    ],
+    "ml": [
+     "സെംപറോപ്പർ",
+     "മുകളിൽ സിംഹങ്ങൾ വലിക്കുന്ന രഥമുള്ള ഓപ്പറ ഹൗസ്."
+    ]
+   },
+   {
+    "id": "residenzschloss",
+    "osm": "r5764",
+    "kind": "castle",
+    "points": 15,
+    "en": [
+     "Residenzschloss",
+     "The royal palace with the treasure chamber 'Green Vault'."
+    ],
+    "ml": [
+     "റെസിഡൻസ്ഷ്ലോസ്",
+     "'ഗ്രീൻ വോൾട്ട്' എന്ന നിധിമുറിയുള്ള രാജകൊട്ടാരം."
+    ]
+   },
+   {
+    "id": "hofkirche",
+    "osm": "w14879154",
+    "kind": "church",
+    "points": 15,
+    "en": [
+     "Hofkirche",
+     "The court church with its tall, lacy tower by the river."
+    ],
+    "ml": [
+     "ഹോഫ്കിർഷെ",
+     "നദിക്കരയിൽ ഉയരമുള്ള ചിത്രപ്പണിയുള്ള ഗോപുരമുള്ള കൊട്ടാരപ്പള്ളി."
+    ]
+   },
+   {
+    "id": "bruehlsche_terrasse",
+    "osm": "r3288098",
+    "kind": "square",
+    "points": 10,
+    "en": [
+     "Brühlsche Terrasse",
+     "'The balcony of Europe': a terrace high above the Elbe."
+    ],
+    "ml": [
+     "ബ്ര്യൂൾഷെ ടെറസ്",
+     "'യൂറോപ്പിന്റെ ബാൽക്കണി': എൽബെയ്ക്കു മുകളിലെ ടെറസ്."
+    ]
+   },
+   {
+    "id": "fuerstenzug",
+    "osm": "w106540348",
+    "kind": "mural",
+    "points": 15,
+    "en": [
+     "Fürstenzug",
+     "A 100-metre wall of porcelain tiles showing a parade of kings."
+    ],
+    "ml": [
+     "ഫ്യൂസ്റ്റൻസുഗ്",
+     "രാജാക്കന്മാരുടെ ഘോഷയാത്ര കാണിക്കുന്ന 100 മീറ്റർ പോഴ്സലൈൻ ചുമർ."
+    ]
+   }
+  ]
+ },
+ "leipzig": {
+  "name_en": "Leipzig",
+  "name_ml": "ലൈപ്സിഷ്",
+  "center": [
+   51.341,
+   12.377
+  ],
+  "landmarks": [
+   {
+    "id": "altes_rathaus",
+    "osm": "w8031319",
+    "kind": "townhall",
+    "points": 20,
+    "en": [
+     "Altes Rathaus",
+     "The long Renaissance town hall with its off-centre tower."
+    ],
+    "ml": [
+     "ആൾട്ടസ് റാത്ത്ഹൗസ്",
+     "നടുവിലല്ലാത്ത ഗോപുരമുള്ള നീണ്ട നവോത്ഥാനകാല ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "thomaskirche",
+    "osm": "w41803555",
+    "kind": "church",
+    "points": 20,
+    "en": [
+     "Thomaskirche",
+     "Where Johann Sebastian Bach worked and is buried."
+    ],
+    "ml": [
+     "തോമസ്കിർഷെ",
+     "യോഹാൻ സെബാസ്റ്റ്യൻ ബാക്ക് ജോലി ചെയ്യുകയും അടക്കം ചെയ്യപ്പെടുകയും ചെയ്ത പള്ളി."
+    ]
+   },
+   {
+    "id": "nikolaikirche",
+    "osm": "w24606979",
+    "kind": "church",
+    "points": 20,
+    "en": [
+     "Nikolaikirche",
+     "The church where the 1989 peaceful revolution began."
+    ],
+    "ml": [
+     "നിക്കോളായ്കിർഷെ",
+     "1989-ലെ സമാധാന വിപ്ലവം തുടങ്ങിയ പള്ളി."
+    ]
+   },
+   {
+    "id": "city_hochhaus",
+    "osm": "w35462506",
+    "kind": "skyscraper",
+    "points": 20,
+    "en": [
+     "City-Hochhaus",
+     "The tall tower shaped like an open book."
+    ],
+    "ml": [
+     "സിറ്റി-ഹോഹ്ഹൗസ്",
+     "തുറന്ന പുസ്തകം പോലുള്ള ഉയർന്ന ഗോപുരം."
+    ]
+   },
+   {
+    "id": "gewandhaus",
+    "osm": "r152769",
+    "kind": "concert_hall",
+    "points": 15,
+    "en": [
+     "Gewandhaus",
+     "The concert hall of one of the world's oldest orchestras."
+    ],
+    "ml": [
+     "ഗെവാന്റ്ഹൗസ്",
+     "ലോകത്തിലെ ഏറ്റവും പഴയ ഓർക്കസ്ട്രകളിലൊന്നിന്റെ സംഗീതശാല."
+    ]
+   },
+   {
+    "id": "maedlerpassage",
+    "osm": "w135015864",
+    "kind": "building",
+    "points": 15,
+    "en": [
+     "Mädlerpassage",
+     "A glass-roofed arcade with Auerbachs Keller, from Goethe's Faust."
+    ],
+    "ml": [
+     "മേഡ്ലർപാസാഷെ",
+     "ഗൊയ്ഥെയുടെ ഫൗസ്റ്റിലെ ഔവർബാക്സ് കെല്ലറുള്ള ചില്ലുമേൽക്കൂര ആർക്കേഡ്."
+    ]
+   },
+   {
+    "id": "hauptbahnhof",
+    "osm": "w18921863",
+    "kind": "station",
+    "points": 15,
+    "en": [
+     "Hauptbahnhof",
+     "One of Europe's biggest railway stations."
+    ],
+    "ml": [
+     "ഹൗപ്റ്റ്ബാൻഹോഫ്",
+     "യൂറോപ്പിലെ ഏറ്റവും വലിയ റെയിൽവേ സ്റ്റേഷനുകളിലൊന്ന്."
+    ]
+   }
+  ]
+ },
+ "hannover": {
+  "name_en": "Hannover",
+  "name_ml": "ഹാനോവർ",
+  "center": [
+   52.371,
+   9.736
+  ],
+  "river": {
+   "name": "Leine",
+   "half_width": 7
+  },
+  "landmarks": [
+   {
+    "id": "neues_rathaus",
+    "osm": "r313173",
+    "kind": "townhall",
+    "points": 30,
+    "en": [
+     "Neues Rathaus",
+     "A palace-like town hall with a huge dome and a curved lift inside."
+    ],
+    "ml": [
+     "നോയസ് റാത്ത്ഹൗസ്",
+     "ഉള്ളിൽ വളഞ്ഞ ലിഫ്റ്റും വലിയ താഴികക്കുടവുമുള്ള കൊട്ടാരം പോലുള്ള ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "marktkirche",
+    "osm": "w5121355",
+    "kind": "church",
+    "points": 20,
+    "en": [
+     "Marktkirche",
+     "The brick church with the tall square tower."
+    ],
+    "ml": [
+     "മാർക്റ്റ്കിർഷെ",
+     "ഉയരമുള്ള ചതുര ഗോപുരമുള്ള ഇഷ്ടികപ്പള്ളി."
+    ]
+   },
+   {
+    "id": "altes_rathaus",
+    "osm": "w5121356",
+    "kind": "townhall",
+    "points": 15,
+    "en": [
+     "Altes Rathaus",
+     "The old brick town hall with pointed gables."
+    ],
+    "ml": [
+     "ആൾട്ടസ് റാത്ത്ഹൗസ്",
+     "കൂർത്ത കൂരകളുള്ള പഴയ ഇഷ്ടിക ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "leineschloss",
+    "osm": "r1170793",
+    "kind": "palace",
+    "points": 15,
+    "en": [
+     "Leineschloss",
+     "The palace on the river, now the state parliament."
+    ],
+    "ml": [
+     "ലൈനെഷ്ലോസ്",
+     "ഇപ്പോൾ സംസ്ഥാന നിയമസഭയായ നദിക്കരയിലെ കൊട്ടാരം."
+    ]
+   },
+   {
+    "id": "nanas",
+    "osm": "n270293090",
+    "kind": "sculpture",
+    "points": 15,
+    "en": [
+     "Nanas",
+     "Three big, colourful dancing women by Niki de Saint Phalle."
+    ],
+    "ml": [
+     "നാനാസ്",
+     "നിക്കി ദ് സാങ് ഫാലിന്റെ മൂന്ന് വലിയ വർണ്ണ നർത്തകികൾ."
+    ]
+   },
+   {
+    "id": "aegidienkirche",
+    "osm": "r7359339",
+    "kind": "ruin",
+    "points": 15,
+    "en": [
+     "Aegidienkirche",
+     "A church ruin kept as a memorial for peace."
+    ],
+    "ml": [
+     "ഏജിഡിയൻകിർഷെ",
+     "സമാധാന സ്മാരകമായി സൂക്ഷിച്ച പള്ളി അവശിഷ്ടം."
+    ]
+   },
+   {
+    "id": "opernhaus",
+    "osm": "w4816458",
+    "kind": "opera",
+    "points": 15,
+    "en": [
+     "Opernhaus",
+     "The opera house with its columned porch."
+    ],
+    "ml": [
+     "ഓപ്പേൺഹൗസ്",
+     "തൂണുകളുള്ള പൂമുഖമുള്ള ഓപ്പറ ഹൗസ്."
+    ]
+   }
+  ]
+ },
+ "bremen": {
+  "name_en": "Bremen",
+  "name_ml": "ബ്രേമൻ",
+  "center": [
+   53.0757,
+   8.8075
+  ],
+  "river": {
+   "name": "Weser",
+   "half_width": 40
+  },
+  "landmarks": [
+   {
+    "id": "rathaus",
+    "osm": "r2190791",
+    "kind": "townhall",
+    "points": 25,
+    "en": [
+     "Bremer Rathaus",
+     "The town hall with the fancy Weser Renaissance front: a World Heritage Site."
+    ],
+    "ml": [
+     "ബ്രേമർ റാത്ത്ഹൗസ്",
+     "മനോഹരമായ വേസർ നവോത്ഥാന മുഖപ്പുള്ള ലോകപൈതൃക ടൗൺഹാൾ."
+    ]
+   },
+   {
+    "id": "roland",
+    "osm": "w111389011",
+    "kind": "statue",
+    "points": 20,
+    "en": [
+     "Roland",
+     "The tall stone knight guarding the market square since 1404."
+    ],
+    "ml": [
+     "റോളണ്ട്",
+     "1404 മുതൽ ചന്തസ്ഥലം കാക്കുന്ന ഉയരമുള്ള കൽ യോദ്ധാവ്."
+    ]
+   },
+   {
+    "id": "dom",
+    "osm": "w224608409",
+    "kind": "cathedral2",
+    "points": 20,
+    "en": [
+     "St. Petri Dom",
+     "The cathedral with two tall green spires."
+    ],
+    "ml": [
+     "സെന്റ് പെട്രി ഡോം",
+     "രണ്ട് ഉയരമുള്ള പച്ച ഗോപുരങ്ങളുള്ള കത്തീഡ്രൽ."
+    ]
+   },
+   {
+    "id": "stadtmusikanten",
+    "osm": "n268618473",
+    "kind": "sculpture",
+    "points": 20,
+    "en": [
+     "Town Musicians",
+     "The donkey, dog, cat and rooster from the fairy tale. Touch the donkey's legs for luck!"
+    ],
+    "ml": [
+     "ടൗൺ മ്യൂസിഷ്യൻസ്",
+     "യക്ഷിക്കഥയിലെ കഴുത, നായ, പൂച്ച, പൂവൻകോഴി. ഭാഗ്യത്തിന് കഴുതയുടെ കാലിൽ തൊടൂ!"
+    ]
+   },
+   {
+    "id": "boettcherstrasse",
+    "osm": "n244036327",
+    "kind": "square",
+    "points": 15,
+    "en": [
+     "Böttcherstraße",
+     "A short street of red-brick art buildings with a porcelain carillon."
+    ],
+    "ml": [
+     "ബ്യോട്ടർഷ്ട്രാസെ",
+     "പോഴ്സലൈൻ മണിനാദമുള്ള ചുവന്ന ഇഷ്ടിക കലാകെട്ടിടങ്ങളുടെ ചെറിയ തെരുവ്."
+    ]
+   },
+   {
+    "id": "schnoor",
+    "osm": "n5143833419",
+    "kind": "houses",
+    "points": 15,
+    "en": [
+     "Schnoor",
+     "The oldest quarter: tiny houses on narrow lanes."
+    ],
+    "ml": [
+     "ഷ്നോർ",
+     "ഇടുങ്ങിയ ഇടവഴികളിൽ ചെറിയ വീടുകളുള്ള ഏറ്റവും പഴയ ഭാഗം."
+    ]
+   },
+   {
+    "id": "schuetting",
+    "osm": "r3335570",
+    "kind": "building",
+    "points": 10,
+    "en": [
+     "Schütting",
+     "The merchants' guild house on the market square."
+    ],
+    "ml": [
+     "ഷ്യൂട്ടിങ്",
+     "ചന്തസ്ഥലത്തെ വ്യാപാരികളുടെ സംഘഭവനം."
+    ]
+   }
+  ]
+ }
 }

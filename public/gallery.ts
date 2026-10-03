@@ -1,7 +1,9 @@
 // Dev-only: every landmark model side by side, one city per row (?city=bamberg shows one city up close).
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { LANDMARK_MODELS } from "./landmarks";
+import { LANDMARK_MODELS as BY } from "./landmarks";
+import { LANDMARK_MODELS_DE } from "./landmarks_de";
+const LANDMARK_MODELS = { ...BY, ...LANDMARK_MODELS_DE };
 import { bake } from "./toykit";
 
 const canvas = document.getElementById("c") as HTMLCanvasElement;

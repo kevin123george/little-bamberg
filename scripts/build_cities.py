@@ -24,13 +24,29 @@ ROAD_WIDE = {"primary", "secondary", "tertiary", "primary_link", "secondary_link
 ROAD_ALL = ROAD_WIDE | {"residential", "unclassified", "living_street", "pedestrian"}
 
 
+MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
+           "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
+CACHE = ROOT / ".cache" / "cities"
+
+
 def overpass(ql):
-    for attempt in range(4):
-        r = requests.post("https://overpass-api.de/api/interpreter", data={"data": ql}, headers=UA, timeout=180)
-        if r.ok:
-            return r.json()["elements"]
-        time.sleep(10 * (attempt + 1))
-    raise RuntimeError(f"Overpass failed: {r.status_code} {r.text[:200]}")
+    import hashlib
+    CACHE.mkdir(parents=True, exist_ok=True)
+    cached = CACHE / f"{hashlib.sha1(ql.encode()).hexdigest()[:16]}.json"
+    if cached.exists():
+        return json.loads(cached.read_text())
+    for attempt in range(16):
+        try:
+            r = requests.post(MIRRORS[attempt % len(MIRRORS)], data={"data": ql}, headers=UA, timeout=240)
+        except requests.RequestException:
+            continue
+        if r.ok and r.headers.get("content-type", "").startswith("application/json"):
+            els = r.json()["elements"]
+            cached.write_text(json.dumps(els))
+            return els
+        print(f"  overpass {r.status_code} at {MIRRORS[attempt % len(MIRRORS)].split('/')[2]}", flush=True)
+        time.sleep(8 * (attempt // len(MIRRORS) + 1))
+    raise RuntimeError("Overpass failed")
 
 
 class Proj:
@@ -102,11 +118,16 @@ def outer_ring(el, proj):
     return []
 
 
-def inside(p, half=289):
+HALF = 289  # set per city in build(): the map's half-size in units (big cities get more)
+
+
+def inside(p, half=None):
+    half = HALF if half is None else half
     return abs(p[0]) <= half and abs(p[1]) <= half
 
 
-def clip_line(line, half=289):
+def clip_line(line, half=None):
+    half = HALF if half is None else half
     """Split a polyline into the runs that stay inside the square map."""
     runs, cur = [], []
     for p in line:
@@ -148,10 +169,14 @@ def chain(segments):
 
 
 def build(city_id, cfg):
+    global HALF
+    HALF = cfg.get("half", 290) - 1
+    half_real = (HALF + 1) / F
+    scale = ((HALF + 1) / 290) ** 2
     lat0, lon0 = cfg["center"]
     proj = Proj(lat0, lon0)
-    dlat = HALF_REAL * 1.05 / 110574
-    dlon = HALF_REAL * 1.05 / (111320 * math.cos(math.radians(lat0)))
+    dlat = half_real * 1.05 / 110574
+    dlon = half_real * 1.05 / (111320 * math.cos(math.radians(lat0)))
     bbox = f"{lat0 - dlat},{lon0 - dlon},{lat0 + dlat},{lon0 + dlon}"
     river = cfg.get("river")
     lm_q = "".join(f'{ {"w": "way", "r": "relation", "n": "node"}[l["osm"][0]] }({l["osm"][1:]});' for l in cfg["landmarks"])
@@ -179,11 +204,17 @@ def build(city_id, cfg):
             mid = poly[len(poly) // 2]
             landmarks[l["id"]] = {"center": mid}
             continue
+        if len(poly) < 3:  # e.g. a bridge relation (members are "outline"/"across", not "outer"): just its middle
+            pts = [proj(g["lat"], g["lon"]) for m in e.get("members", []) for g in (m.get("geometry") or [])]
+            if not pts:
+                raise SystemExit(f"{city_id}: landmark {l['id']} ({l['osm']}) has no geometry")
+            landmarks[l["id"]] = {"center": centroid(pts)}
+            continue
         poly = simplify_ring(poly, 0.35)
         entry = {"footprint": poly, "center": centroid(poly)}
         landmarks[l["id"]] = entry
         lm_polys.append(poly)
-    far = [k for k, v in landmarks.items() if not inside(v["center"], 280)]
+    far = [k for k, v in landmarks.items() if not inside(v["center"], HALF - 9)]
     if far:
         raise SystemExit(f"{city_id}: landmarks outside the map: {far}")
 
@@ -210,7 +241,7 @@ def build(city_id, cfg):
             continue
         cands.append((math.hypot(*c) / (a ** 0.35), {"footprint": poly}))
     cands.sort(key=lambda t: t[0])
-    scatter = [b for _, b in cands[:MAX_BUILDINGS]]
+    scatter = [b for _, b in cands[:int(MAX_BUILDINGS * min(3, scale))]]
 
     # ---- roads
     roads = []
@@ -223,14 +254,14 @@ def build(city_id, cfg):
             run = simplify(run, 0.6)
             roads.append({"line": run, "width": 3.2 if hw in ROAD_WIDE else 2.2})
     roads.sort(key=lambda r: min(math.hypot(*p) for p in r["line"]))
-    roads = roads[:420]
+    roads = roads[:int(420 * min(3, scale))]
 
     # ---- river: the longest joined centreline run of the named river
     river_line = []
     if river:
         segs = [[proj(g["lat"], g["lon"]) for g in e.get("geometry", [])] for e in els
                 if e["type"] == "way" and e.get("tags", {}).get("waterway") == "river"]
-        runs = [r for line in chain(segs) for r in clip_line(line, 300)]
+        runs = [r for line in chain(segs) for r in clip_line(line, HALF + 11)]
         if runs:
             river_line = simplify(max(runs, key=len), 1.0)
 
@@ -239,7 +270,7 @@ def build(city_id, cfg):
         x, z = proj(*h["at"])
         hills.append({"cx": x, "cz": z, "r": h["r"], "h": h["h"]})
 
-    meta = {"id": city_id, "name_en": cfg["name_en"], "name_ml": cfg["name_ml"], "latlon": cfg["center"],
+    meta = {"id": city_id, "name_en": cfg["name_en"], "name_ml": cfg["name_ml"], "latlon": cfg["center"], "half": HALF + 1,
             "river_half_width": (river or {}).get("half_width", 0), "hills": hills,
             "landmarks": [{"id": l["id"], "kind": l["kind"], "points": l["points"], "label_en": l["en"][0], "flavor_en": l["en"][1],
                            "label_ml": l["ml"][0], "flavor_ml": l["ml"][1]} for l in cfg["landmarks"]]}
