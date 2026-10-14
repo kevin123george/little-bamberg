@@ -1,7 +1,7 @@
 # Little Bamberg (3D driving game)
 
 > Shared rules for all projects: `~/Projects/AGENTS.md` (worktrees, decision records, verification, secrets, money).
-> Read `~/Projects/homelab-wiki/README.md` and `homelab-wiki/decisions/` first.
+> Read `~/Projects/homelab-wiki/README.md`, the central `homelab-wiki/decisions/` and this repo's `docs/decisions/` first.
 
 ## What it is
 A toy-town 3D game for Malayalis in Germany: walk and drive a truck through one streamed map of Germany with 17 real
@@ -38,4 +38,4 @@ Real Chrome tabs report hidden and pause animation — use screenshots. Overpass
 Closed rings collapse when simplified (use `wring()`). Depth fighting: sea plane −0.6, near 0.5 (5 in map view).
 
 ## Decisions
-0017 one Germany map. Full history in the homelab wiki's Little Bamberg row.
+Project: `docs/decisions/0001` one Germany map. Full history in the homelab wiki's Little Bamberg row.
