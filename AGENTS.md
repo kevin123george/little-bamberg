@@ -1,7 +1,7 @@
 # Little Bamberg (3D driving game)
 
-> Shared rules for all projects: `~/Documents/AGENTS.md` (worktrees, decision records, verification, secrets, money).
-> Read `~/Documents/homelab-wiki/README.md` and `homelab-wiki/decisions/` first.
+> Shared rules for all projects: `~/Projects/AGENTS.md` (worktrees, decision records, verification, secrets, money).
+> Read `~/Projects/homelab-wiki/README.md` and `homelab-wiki/decisions/` first.
 
 ## What it is
 A toy-town 3D game for Malayalis in Germany: walk and drive a truck through one streamed map of Germany with 17 real
