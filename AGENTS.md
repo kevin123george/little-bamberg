@@ -8,7 +8,7 @@ A toy-town 3D game for Malayalis in Germany: walk and drive a truck through one 
 cities and their landmarks; Malayalam/English; leaderboard.
 
 ## Where it runs
-Umbrel `~/little-bamberg`, `http://umbrel:3300` — **Tailscale only**. Leaderboard in SQLite volume
+Umbrel `~/little-bamberg`, `http://umbrel:3300` (Tailscale MagicDNS) — **Tailscale only**. Leaderboard in SQLite volume
 `little-bamberg_data` (`data/` is never synced — don't create test players on the live leaderboard).
 
 ## Stack

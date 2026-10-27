@@ -2,11 +2,13 @@
 # Deploy Little Bamberg to Umbrel and rebuild.
 # Usage: ./deploy.sh          → auto-detect (home network or Tailscale)
 #        ./deploy.sh --home   → force umbrel.local (home network)
-#        ./deploy.sh --ts     → force Tailscale IP umbrel
+#        ./deploy.sh --ts     → force Tailscale (MagicDNS name "umbrel")
 set -e
 cd "$(dirname "$0")"
 
-TAILSCALE_IP="umbrel"
+# Tailscale MagicDNS name of the server; its IP is looked up at deploy time (override with TAILSCALE_IP=...)
+TAILSCALE_NAME="${TAILSCALE_NAME:-umbrel}"
+TAILSCALE_IP="${TAILSCALE_IP:-$(python3 -c "import socket,sys; print(socket.gethostbyname(sys.argv[1]))" "$TAILSCALE_NAME")}"
 TAILSCALE_HOST="umbrel@${TAILSCALE_IP}"
 HOME_HOST="umbrel@umbrel.local"
 REMOTE_DIR="~/little-bamberg"
